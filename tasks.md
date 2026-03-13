@@ -45,6 +45,6 @@ The app is **functionally complete** for its MVP scope. The debug APK is install
 - [x] Add `proguard-rules.pro` stub file (referenced by build config but missing)
 - [x] Create `build.sh` script that sets JAVA_HOME and runs `./gradlew assembleDebug`
 - [x] Generate a release signing keystore and configure `signingConfigs` in `app/build.gradle.kts`
-- [ ] Create `install.sh` script that builds the APK and installs via ADB (with device detection)
+- [x] Create `install.sh` script that builds the APK and installs via ADB (with device detection)
 - [ ] Add `INTERNET` permission to AndroidManifest if gateway features will need network access
 - [ ] Document the full install process in README.md (sideloading, ADB wireless, QR code transfer)
