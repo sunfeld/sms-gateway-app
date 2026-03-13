@@ -18,3 +18,33 @@
 - [x] Bind UI elements in `MainActivity` to call `SmsService.sendDirectSms` and display `Toast` notifications for success/failure.
 - [x] Create a basic unit test `SmsValidationTest.kt` to verify phone number formatting logic.
 - [x] Run `./gradlew assembleDebug` to verify build integrity and APK generation.
+
+- [x] Assess the State Of The sms gateway and make a plan for How We Can get this app into an installable State
+
+## Assessment: Current State (2026-03-13)
+
+### What Works
+- **Build**: `./gradlew assembleDebug` succeeds (5.5MB APK generated at `app/build/outputs/apk/debug/app-debug.apk`)
+- **Tests**: All unit tests pass (`./gradlew test`)
+- **Code quality**: Clean Kotlin, proper sealed class error handling, Material 3 UI, PendingIntent callbacks
+- **SDK**: Android SDK present at `/home/sunai/Android/Sdk` with platform 34, build-tools 34.0.0
+- **JDK**: OpenJDK 17 available at `/home/linuxbrew/.linuxbrew/Cellar/openjdk@17/17.0.18/libexec`
+
+### Issues Blocking "Installable" State
+1. **No JAVA_HOME set** — build requires manually exporting `JAVA_HOME` each time
+2. **No `proguard-rules.pro`** — referenced in `build.gradle.kts` but missing (blocks clean release builds)
+3. **No release signing keystore** — only debug APK can be built; no signed release for distribution
+4. **No install/build script** — no convenience tooling for building + transferring APK to device
+5. **No device connected** — ADB shows no devices; need USB debugging or wireless ADB setup
+6. **Debug APK is already sideload-ready** — the unsigned debug APK can be installed on any device with developer mode
+
+### Verdict
+The app is **functionally complete** for its MVP scope. The debug APK is installable via sideloading right now. To make it properly distributable, we need signing and convenience tooling.
+
+## Phase 2: Make Installable (Plan)
+- [ ] Add `proguard-rules.pro` stub file (referenced by build config but missing)
+- [ ] Create `build.sh` script that sets JAVA_HOME and runs `./gradlew assembleDebug`
+- [ ] Generate a release signing keystore and configure `signingConfigs` in `app/build.gradle.kts`
+- [ ] Create `install.sh` script that builds the APK and installs via ADB (with device detection)
+- [ ] Add `INTERNET` permission to AndroidManifest if gateway features will need network access
+- [ ] Document the full install process in README.md (sideloading, ADB wireless, QR code transfer)
