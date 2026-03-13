@@ -6,9 +6,15 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.os.Build
 import android.telephony.PhoneNumberUtils
 import android.telephony.SmsManager
+import android.telephony.SmsManager.RESULT_ERROR_GENERIC_FAILURE
+import android.telephony.SmsManager.RESULT_ERROR_NO_SERVICE
+import android.telephony.SmsManager.RESULT_ERROR_NULL_PDU
+import android.telephony.SmsManager.RESULT_ERROR_RADIO_OFF
 import android.util.Log
+import java.util.concurrent.atomic.AtomicInteger
 
 sealed class SmsResult {
     data class Success(val phoneNumber: String) : SmsResult()
@@ -16,6 +22,11 @@ sealed class SmsResult {
     data class EmptyMessage(val phoneNumber: String) : SmsResult()
     data class PermissionDenied(val error: SecurityException) : SmsResult()
     data class SendFailed(val error: Exception) : SmsResult()
+}
+
+interface SmsStatusListener {
+    fun onSmsSent(phoneNumber: String, success: Boolean, errorMessage: String?)
+    fun onSmsDelivered(phoneNumber: String, delivered: Boolean)
 }
 
 /**
@@ -28,11 +39,83 @@ class SmsService(private val context: Context) {
         private const val TAG = "SmsService"
         const val ACTION_SMS_SENT = "com.sunfeld.smsgateway.SMS_SENT"
         const val ACTION_SMS_DELIVERED = "com.sunfeld.smsgateway.SMS_DELIVERED"
+        private const val EXTRA_PHONE_NUMBER = "extra_phone_number"
         private val PHONE_PATTERN = Regex("^\\+?[1-9]\\d{6,14}$")
+        private val requestCodeCounter = AtomicInteger(0)
     }
 
     private val smsManager: SmsManager
         get() = context.getSystemService(SmsManager::class.java)
+
+    var statusListener: SmsStatusListener? = null
+
+    private var sentReceiver: BroadcastReceiver? = null
+    private var deliveredReceiver: BroadcastReceiver? = null
+
+    fun registerStatusCallbacks() {
+        sentReceiver = object : BroadcastReceiver() {
+            override fun onReceive(ctx: Context, intent: Intent) {
+                val phone = intent.getStringExtra(EXTRA_PHONE_NUMBER) ?: "unknown"
+                when (resultCode) {
+                    Activity.RESULT_OK -> {
+                        Log.d(TAG, "SMS sent successfully to $phone")
+                        statusListener?.onSmsSent(phone, true, null)
+                    }
+                    RESULT_ERROR_GENERIC_FAILURE -> {
+                        Log.e(TAG, "SMS send failed (generic) to $phone")
+                        statusListener?.onSmsSent(phone, false, "Generic failure")
+                    }
+                    RESULT_ERROR_NO_SERVICE -> {
+                        Log.e(TAG, "SMS send failed (no service) to $phone")
+                        statusListener?.onSmsSent(phone, false, "No service")
+                    }
+                    RESULT_ERROR_NULL_PDU -> {
+                        Log.e(TAG, "SMS send failed (null PDU) to $phone")
+                        statusListener?.onSmsSent(phone, false, "Null PDU")
+                    }
+                    RESULT_ERROR_RADIO_OFF -> {
+                        Log.e(TAG, "SMS send failed (radio off) to $phone")
+                        statusListener?.onSmsSent(phone, false, "Radio off")
+                    }
+                    else -> {
+                        Log.e(TAG, "SMS send failed (code=$resultCode) to $phone")
+                        statusListener?.onSmsSent(phone, false, "Error code: $resultCode")
+                    }
+                }
+            }
+        }
+
+        deliveredReceiver = object : BroadcastReceiver() {
+            override fun onReceive(ctx: Context, intent: Intent) {
+                val phone = intent.getStringExtra(EXTRA_PHONE_NUMBER) ?: "unknown"
+                val delivered = resultCode == Activity.RESULT_OK
+                Log.d(TAG, "SMS delivery status for $phone: ${if (delivered) "delivered" else "failed (code=$resultCode)"}")
+                statusListener?.onSmsDelivered(phone, delivered)
+            }
+        }
+
+        val exportFlag = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            Context.RECEIVER_NOT_EXPORTED
+        } else {
+            0
+        }
+
+        context.registerReceiver(sentReceiver, IntentFilter(ACTION_SMS_SENT), exportFlag)
+        context.registerReceiver(deliveredReceiver, IntentFilter(ACTION_SMS_DELIVERED), exportFlag)
+        Log.d(TAG, "SMS status callbacks registered")
+    }
+
+    fun unregisterStatusCallbacks() {
+        sentReceiver?.let {
+            try { context.unregisterReceiver(it) } catch (_: IllegalArgumentException) {}
+            sentReceiver = null
+        }
+        deliveredReceiver?.let {
+            try { context.unregisterReceiver(it) } catch (_: IllegalArgumentException) {}
+            deliveredReceiver = null
+        }
+        Log.d(TAG, "SMS status callbacks unregistered")
+    }
 
     /**
      * Validate that a phone number is well-formed.
@@ -66,16 +149,16 @@ class SmsService(private val context: Context) {
         return try {
             val sentIntent = PendingIntent.getBroadcast(
                 context,
-                0,
-                Intent(ACTION_SMS_SENT),
-                PendingIntent.FLAG_IMMUTABLE
+                requestCodeCounter.getAndIncrement(),
+                Intent(ACTION_SMS_SENT).putExtra(EXTRA_PHONE_NUMBER, stripped),
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
             )
 
             val deliveredIntent = PendingIntent.getBroadcast(
                 context,
-                0,
-                Intent(ACTION_SMS_DELIVERED),
-                PendingIntent.FLAG_IMMUTABLE
+                requestCodeCounter.getAndIncrement(),
+                Intent(ACTION_SMS_DELIVERED).putExtra(EXTRA_PHONE_NUMBER, stripped),
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
             )
 
             smsManager.sendTextMessage(

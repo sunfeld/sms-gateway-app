@@ -10,7 +10,7 @@ import androidx.core.content.ContextCompat
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.textfield.TextInputEditText
 
-class MainActivity : AppCompatActivity() {
+class MainActivity : AppCompatActivity(), SmsStatusListener {
 
     private lateinit var editRecipient: TextInputEditText
     private lateinit var editMessage: TextInputEditText
@@ -41,6 +41,8 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
 
         smsService = SmsService(this)
+        smsService.statusListener = this
+        smsService.registerStatusCallbacks()
 
         editRecipient = findViewById(R.id.editRecipient)
         editMessage = findViewById(R.id.editMessage)
@@ -55,6 +57,31 @@ class MainActivity : AppCompatActivity() {
             updateSendButtonState(true)
         } else {
             permissionLauncher.launch(requiredPermissions)
+        }
+    }
+
+    override fun onDestroy() {
+        smsService.unregisterStatusCallbacks()
+        super.onDestroy()
+    }
+
+    override fun onSmsSent(phoneNumber: String, success: Boolean, errorMessage: String?) {
+        runOnUiThread {
+            if (success) {
+                Toast.makeText(this, "SMS to $phoneNumber sent successfully", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(this, "SMS to $phoneNumber failed: $errorMessage", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    override fun onSmsDelivered(phoneNumber: String, delivered: Boolean) {
+        runOnUiThread {
+            if (delivered) {
+                Toast.makeText(this, "SMS to $phoneNumber delivered", Toast.LENGTH_SHORT).show()
+            } else {
+                Toast.makeText(this, "SMS to $phoneNumber delivery failed", Toast.LENGTH_LONG).show()
+            }
         }
     }
 
@@ -78,7 +105,7 @@ class MainActivity : AppCompatActivity() {
 
         when (result) {
             is SmsResult.Success -> {
-                Toast.makeText(this, "SMS sent to ${result.phoneNumber}", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "SMS queued to ${result.phoneNumber}", Toast.LENGTH_SHORT).show()
                 editMessage.text?.clear()
             }
             is SmsResult.InvalidNumber -> {

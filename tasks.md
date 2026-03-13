@@ -10,7 +10,7 @@
 - [x] Add `<uses-feature>` tags for `android.hardware.telephony` to ensure hardware compatibility.
 - [x] Create `SmsService.kt` utility class to encapsulate `SmsManager` logic.
 - [x] Implement `sendDirectSms(phoneNumber: String, message: String)` using `SmsManager.sendTextMessage`.
-- [ ] Implement `PendingIntent` callbacks in `SmsService` to track `SMS_SENT` and `SMS_DELIVERED` statuses.
+- [x] Implement `PendingIntent` callbacks in `SmsService` to track `SMS_SENT` and `SMS_DELIVERED` statuses.
 - [x] Add error handling logic to catch `SecurityException` or invalid phone number formats.
 - [x] Create `activity_main.xml` layout with `EditText` for recipient, `EditText` for message, and a `Button` for sending.
 - [x] Implement `PermissionManager.kt` helper to handle the `ActivityResultLauncher` for multiple runtime permissions.
