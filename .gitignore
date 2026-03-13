@@ -68,6 +68,9 @@ captures/
 .externalNativeBuild/
 .cxx/
 
+# Keystore properties (passwords)
+keystore.properties
+
 # Google Services (if used)
 google-services.json
 
