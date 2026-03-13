@@ -42,7 +42,7 @@
 The app is **functionally complete** for its MVP scope. The debug APK is installable via sideloading right now. To make it properly distributable, we need signing and convenience tooling.
 
 ## Phase 2: Make Installable (Plan)
-- [ ] Add `proguard-rules.pro` stub file (referenced by build config but missing)
+- [x] Add `proguard-rules.pro` stub file (referenced by build config but missing)
 - [ ] Create `build.sh` script that sets JAVA_HOME and runs `./gradlew assembleDebug`
 - [ ] Generate a release signing keystore and configure `signingConfigs` in `app/build.gradle.kts`
 - [ ] Create `install.sh` script that builds the APK and installs via ADB (with device detection)
