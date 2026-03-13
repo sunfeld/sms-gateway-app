@@ -47,4 +47,4 @@ The app is **functionally complete** for its MVP scope. The debug APK is install
 - [x] Generate a release signing keystore and configure `signingConfigs` in `app/build.gradle.kts`
 - [x] Create `install.sh` script that builds the APK and installs via ADB (with device detection)
 - [x] Add `INTERNET` permission to AndroidManifest if gateway features will need network access
-- [ ] Document the full install process in README.md (sideloading, ADB wireless, QR code transfer)
+- [x] Document the full install process in README.md (sideloading, ADB wireless, QR code transfer)
