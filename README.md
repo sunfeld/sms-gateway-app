@@ -330,6 +330,48 @@ BluetoothManager.init()
 
 When registered, the SDP record makes the device discoverable as a HID keyboard to nearby Bluetooth hosts. Incoming connections trigger the `NewConnection` D-Bus method, which receives the L2CAP file descriptor for HID data exchange.
 
+## Just Works Pairing Security Parameters
+
+The `bluetooth_manager.py` module implements "Just Works" Secure Simple Pairing (SSP) to force immediate pairing pop-ups on target devices without requiring numeric comparison or passkey entry.
+
+### How It Works
+
+Just Works uses the `NoInputNoOutput` IO capability to select the SSP association model that requires no user interaction on the initiating side. When a pairing request is sent, the target device (iOS, Android, etc.) shows an immediate simple pairing pop-up.
+
+### JustWorksAgent
+
+The `JustWorksAgent` is a D-Bus service object implementing the `org.bluez.Agent1` interface:
+
+| Method | Behavior |
+|---|---|
+| `RequestPinCode` | Returns empty string (SSP does not use PIN codes) |
+| `RequestPasskey` | Returns `0` (auto-accept) |
+| `RequestConfirmation` | Auto-accepts numeric confirmation silently |
+| `RequestAuthorization` | Auto-authorizes the device |
+| `AuthorizeService` | Auto-authorizes service access (e.g., HID profile) |
+| `DisplayPasskey` | No-op (NoInputNoOutput has no display) |
+| `DisplayPinCode` | No-op |
+| `Cancel` | Logs cancellation |
+| `Release` | Logs release |
+
+### Configuration Flow
+
+```
+BluetoothManager.configure_just_works_pairing()
+  → ensure_ready() (power on, discoverable, pairable)
+  → JustWorksAgent(bus, path)
+  → AgentManager1.RegisterAgent(path, "NoInputNoOutput")
+  → AgentManager1.RequestDefaultAgent(path)
+```
+
+### Constants
+
+| Constant | Value | Purpose |
+|---|---|---|
+| `AGENT_CAPABILITY_NO_INPUT_NO_OUTPUT` | `"NoInputNoOutput"` | IO capability forcing Just Works SSP |
+| `AGENT_PATH_JUST_WORKS` | `"/org/bluez/agent_just_works"` | D-Bus object path for the agent |
+| `JUST_WORKS_DEFAULT_PASSKEY` | `0` | Default passkey returned if unexpectedly requested |
+
 ## Bluetooth Stress Test API
 
 The app integrates with a FastAPI backend that orchestrates Bluetooth stress testing operations. The backend coordinates multiple Bluetooth subsystems (advertising, scanning, pairing) through a single control endpoint.
