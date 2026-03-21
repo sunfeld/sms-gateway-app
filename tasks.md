@@ -116,7 +116,7 @@ The app is **functionally complete** for its MVP scope. The debug APK is install
     - [x] No regressions introduced
 - [x] Documentation & Demo: Record demo screencast and update docs for "Configure SDP (Service Discovery Protocol) record in `bluetooth_manager.py` t..."
   - **Verification Tests**:
-    - [ ] Functionality verified manually
+    - [x] Functionality verified manually
     - [x] Automated tests pass (or written if missing)
     - [x] No regressions introduced
 - [ ] Create `AdvertisingPayload` generator to randomize MAC addresses and rotate device names (e.g., "Apple Magic Keyboard", "Logitech K380").
