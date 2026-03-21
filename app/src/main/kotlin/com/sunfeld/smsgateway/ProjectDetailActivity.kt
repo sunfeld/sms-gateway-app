@@ -15,6 +15,13 @@ class ProjectDetailActivity : AppCompatActivity() {
 
     private val viewModel: ProjectViewModel by viewModels()
 
+    private val gatewayStatusReceiver = GatewayStatusReceiver { isActive ->
+        if (isActive) {
+            viewModel.setGatewayInstalled(true)
+            viewModel.stopStatusPolling()
+        }
+    }
+
     companion object {
         const val EXTRA_PROJECT_NAME = "project_name"
         const val EXTRA_GATEWAY_INSTALLED = "sms_gateway_installed"
@@ -61,10 +68,37 @@ class ProjectDetailActivity : AppCompatActivity() {
         }
     }
 
+    override fun onStart() {
+        super.onStart()
+        gatewayStatusReceiver.register(this)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Refresh status on resume and start polling if gateway is not yet active
+        viewModel.refreshProjectStatus()
+        if (viewModel.gatewayInstalled.value != true) {
+            viewModel.startStatusPolling()
+        }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        viewModel.stopStatusPolling()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        gatewayStatusReceiver.unregister(this)
+    }
+
     private fun updateGatewayUI(installed: Boolean) {
         if (installed) {
             txtGatewayStatus.text = getString(R.string.gateway_status_installed)
             btnInstallGateway.visibility = View.GONE
+            viewModel.stopStatusPolling()
+            // Broadcast the status change so other components can react
+            GatewayStatusReceiver.sendStatusBroadcast(this, gatewayActive = true)
         } else {
             txtGatewayStatus.text = getString(R.string.gateway_status_not_installed)
             btnInstallGateway.visibility = View.VISIBLE

@@ -44,6 +44,11 @@ class GatewayApiClient(
         val apk: String?
     )
 
+    data class ProjectStatus(
+        val name: String,
+        val gatewayActive: Boolean
+    )
+
     /**
      * Triggers the gateway install via POST /api/projects/{name}/install-gateway.
      * Returns InstallResult on success, throws IOException on failure.
@@ -77,6 +82,41 @@ class GatewayApiClient(
                 message = json.optString("message", ""),
                 statusUrl = json.optString("statusUrl", "")
             )
+        }
+    }
+
+    /**
+     * Fetches the project status from the active projects list.
+     * Returns whether the SMS gateway is active for this project.
+     */
+    @Throws(IOException::class)
+    fun getProjectStatus(): ProjectStatus {
+        val request = Request.Builder()
+            .url("$baseUrl/api/projects/active")
+            .get()
+            .build()
+
+        client.newCall(request).execute().use { response ->
+            val responseBody = response.body?.string()
+                ?: throw IOException("Empty response body")
+
+            if (!response.isSuccessful) {
+                throw IOException("Project status check failed (${response.code})")
+            }
+
+            val jsonArray = org.json.JSONArray(responseBody)
+            for (i in 0 until jsonArray.length()) {
+                val project = jsonArray.getJSONObject(i)
+                if (project.optString("name") == PROJECT_NAME) {
+                    val gatewayAvailable = project.optBoolean("sms_gateway_available", false)
+                    return ProjectStatus(
+                        name = PROJECT_NAME,
+                        gatewayActive = gatewayAvailable
+                    )
+                }
+            }
+
+            return ProjectStatus(name = PROJECT_NAME, gatewayActive = false)
         }
     }
 

@@ -5,6 +5,7 @@ import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -36,9 +37,15 @@ class ProjectViewModel : ViewModel() {
 
     var apiClient: GatewayApiClient = GatewayApiClient()
 
+    private var statusPollingJob: Job? = null
+
     companion object {
         private const val POLL_INTERVAL_MS = 3000L
         private const val MAX_POLL_ATTEMPTS = 60  // 3 minutes max
+        private const val STATUS_POLL_INTERVAL_MS = 5000L
+        private const val MAX_STATUS_POLL_ATTEMPTS = 36  // 3 minutes max
+        const val ACTION_GATEWAY_STATUS_CHANGED = "com.sunfeld.smsgateway.GATEWAY_STATUS_CHANGED"
+        const val EXTRA_GATEWAY_ACTIVE = "gateway_active"
     }
 
     fun setGatewayInstalled(installed: Boolean) {
@@ -63,6 +70,11 @@ class ProjectViewModel : ViewModel() {
 
                 if (result.ok && result.statusUrl.isNotEmpty()) {
                     pollJobStatus(result.statusUrl)
+                    // After job polling completes, start status polling to
+                    // confirm the backend has marked the gateway as ACTIVE
+                    if (_gatewayInstalled.value != true) {
+                        startStatusPolling()
+                    }
                 } else if (result.ok) {
                     _installState.value = InstallState.Success(result.message)
                     _gatewayInstalled.value = true
@@ -114,9 +126,77 @@ class ProjectViewModel : ViewModel() {
     }
 
     /**
+     * Starts periodic polling of the project status from the backend.
+     * Polls every 5 seconds until the gateway is confirmed ACTIVE or
+     * the maximum number of attempts is reached.
+     * Automatically stops when gateway becomes active.
+     */
+    fun startStatusPolling() {
+        if (statusPollingJob?.isActive == true) return
+        if (_gatewayInstalled.value == true) return
+
+        statusPollingJob = viewModelScope.launch {
+            var attempts = 0
+            while (attempts < MAX_STATUS_POLL_ATTEMPTS) {
+                delay(STATUS_POLL_INTERVAL_MS)
+                attempts++
+
+                try {
+                    val projectStatus = withContext(Dispatchers.IO) {
+                        apiClient.getProjectStatus()
+                    }
+
+                    if (projectStatus.gatewayActive) {
+                        _gatewayInstalled.value = true
+                        if (_installState.value is InstallState.Installing) {
+                            _installState.value = InstallState.Success("Gateway is now active")
+                        }
+                        return@launch
+                    }
+                } catch (_: Exception) {
+                    // Silently continue polling on transient errors
+                }
+            }
+        }
+    }
+
+    /**
+     * Stops the project status polling coroutine.
+     */
+    fun stopStatusPolling() {
+        statusPollingJob?.cancel()
+        statusPollingJob = null
+    }
+
+    /**
+     * Performs a single project status check against the backend.
+     * Updates gatewayInstalled if the backend confirms ACTIVE.
+     */
+    fun refreshProjectStatus() {
+        viewModelScope.launch {
+            try {
+                val projectStatus = withContext(Dispatchers.IO) {
+                    apiClient.getProjectStatus()
+                }
+                if (projectStatus.gatewayActive) {
+                    _gatewayInstalled.value = true
+                    stopStatusPolling()
+                }
+            } catch (_: Exception) {
+                // Ignore transient errors on single refresh
+            }
+        }
+    }
+
+    /**
      * Resets install state back to Idle (e.g. after dismissing an error).
      */
     fun resetState() {
         _installState.value = InstallState.Idle
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        stopStatusPolling()
     }
 }
