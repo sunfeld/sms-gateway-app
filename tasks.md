@@ -156,7 +156,7 @@ The app is **functionally complete** for its MVP scope. The debug APK is install
     - [ ] No regressions introduced
 - [x] Documentation & Demo: Record demo screencast and update docs for "Implement `trigger_pairing_request()` to initiate outbound HID connection att..."
   - **Verification Tests**:
-    - [ ] Functionality verified manually
+    - [x] Functionality verified manually
     - [ ] Automated tests pass (or written if missing)
     - [ ] No regressions introduced
 - [ ] Create an asynchronous loop in `attack_orchestrator.py` to cycle through the target list and send concurrent "Pairing Request" packets.
