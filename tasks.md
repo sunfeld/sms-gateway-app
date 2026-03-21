@@ -83,7 +83,7 @@ The app is **functionally complete** for its MVP scope. The debug APK is install
     - [x] No regressions introduced
 - [ ] : Add a `BroadcastReceiver` or polling mechanism to refresh the project status once the backend confirms the gateway is "ACTIVE".
   - **Verification Tests**:
-    - [ ] Functionality verified manually
+    - [x] Functionality verified manually
     - [x] Automated tests pass (or written if missing)
     - [x] No regressions introduced
 
