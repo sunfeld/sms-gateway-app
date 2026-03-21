@@ -59,7 +59,7 @@ The app is **functionally complete** for its MVP scope. The debug APK is install
 - [x] : Create `POST /api/projects/{id}/install-gateway` endpoint to trigger the deployment pipeline for the SMS Gateway.
   - **Verification Tests**:
     - [x] Functionality verified manually
-    - [ ] Automated tests pass (or written if missing)
+    - [x] Automated tests pass (or written if missing)
     - [x] No regressions introduced
 - [x] : Create `GatewayInstallButton.kt` component with states for `IDLE`, `INSTALLING`, and `ERROR` using Material 3 Button styles.
   - **Verification Tests**:
