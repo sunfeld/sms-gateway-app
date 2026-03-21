@@ -89,11 +89,11 @@ The app is **functionally complete** for its MVP scope. The debug APK is install
 
 
 ## API Integration and UI
-- [ ] Install `dbus-python` and `bluez` dependencies and create `bluetooth_manager.py` to interface with system Bluetooth adapter.
+- [x] Install `dbus-python` and `bluez` dependencies and create `bluetooth_manager.py` to interface with system Bluetooth adapter.
   - **Verification Tests**:
-    - [ ] Functionality verified manually
-    - [ ] Automated tests pass (or written if missing)
-    - [ ] No regressions introduced
+    - [x] Functionality verified manually
+    - [x] Automated tests pass (or written if missing)
+    - [x] No regressions introduced
 - [x] Documentation & Demo: Record demo screencast and update docs for "Install `dbus-python` and `bluez` dependencies and create `bluetooth_manager...."
   - **Verification Tests**:
     - [ ] Functionality verified manually
