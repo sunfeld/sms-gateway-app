@@ -26,10 +26,18 @@ mock_dbus.exceptions = MagicMock()
 mock_dbus.exceptions.DBusException = Exception
 
 import sys
+
+# Mock dbus.service for JustWorksAgent (inherits dbus.service.Object)
+mock_service = MagicMock()
+mock_service.Object = object
+mock_service.method = lambda iface, **kw: lambda fn: fn
+mock_dbus.service = mock_service
+
 sys.modules["dbus"] = mock_dbus
 sys.modules["dbus.mainloop"] = mock_dbus.mainloop
 sys.modules["dbus.mainloop.glib"] = mock_dbus.mainloop.glib
 sys.modules["dbus.exceptions"] = mock_dbus.exceptions
+sys.modules["dbus.service"] = mock_service
 
 from bluetooth_manager import (
     BluetoothManager,
