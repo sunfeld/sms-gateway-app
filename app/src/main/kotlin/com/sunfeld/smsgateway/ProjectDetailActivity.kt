@@ -18,9 +18,6 @@ class ProjectDetailActivity : AppCompatActivity() {
     companion object {
         const val EXTRA_PROJECT_NAME = "project_name"
         const val EXTRA_GATEWAY_INSTALLED = "sms_gateway_installed"
-        const val EXTRA_PROJECT_ID = "project_id"
-        const val EXTRA_API_BASE_URL = "api_base_url"
-        private const val DEFAULT_API_BASE_URL = "http://localhost:3001"
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -33,37 +30,34 @@ class ProjectDetailActivity : AppCompatActivity() {
 
         val projectName = intent.getStringExtra(EXTRA_PROJECT_NAME) ?: getString(R.string.app_name)
         val gatewayInstalled = intent.getBooleanExtra(EXTRA_GATEWAY_INSTALLED, false)
-        val projectId = intent.getIntExtra(EXTRA_PROJECT_ID, -1)
-        val baseUrl = intent.getStringExtra(EXTRA_API_BASE_URL) ?: DEFAULT_API_BASE_URL
 
         txtProjectTitle.text = projectName
-        updateGatewayUI(gatewayInstalled)
+        viewModel.setGatewayInstalled(gatewayInstalled)
 
         btnInstallGateway.onInstallClick = {
-            if (projectId != -1) {
-                viewModel.installGateway(baseUrl, projectId)
-            } else {
-                Toast.makeText(this, "No project ID provided", Toast.LENGTH_SHORT).show()
-            }
+            viewModel.installGateway()
         }
 
         viewModel.installState.observe(this) { state ->
             when (state) {
-                is InstallResult.Idle -> {
+                is InstallState.Idle -> {
                     btnInstallGateway.state = GatewayInstallButton.State.IDLE
                 }
-                is InstallResult.Installing -> {
+                is InstallState.Installing -> {
                     btnInstallGateway.state = GatewayInstallButton.State.INSTALLING
                 }
-                is InstallResult.Success -> {
-                    updateGatewayUI(installed = true)
-                    Toast.makeText(this, "Gateway installed successfully", Toast.LENGTH_SHORT).show()
+                is InstallState.Success -> {
+                    Toast.makeText(this, state.message, Toast.LENGTH_SHORT).show()
                 }
-                is InstallResult.Error -> {
+                is InstallState.Error -> {
                     btnInstallGateway.state = GatewayInstallButton.State.ERROR
                     Toast.makeText(this, state.message, Toast.LENGTH_LONG).show()
                 }
             }
+        }
+
+        viewModel.gatewayInstalled.observe(this) { installed ->
+            updateGatewayUI(installed)
         }
     }
 
