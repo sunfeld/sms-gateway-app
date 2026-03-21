@@ -286,6 +286,50 @@ After installing via any method:
 
 The **debug** APK works for sideloading and personal use. The **release** APK is signed with the project keystore (configured in `keystore.properties`) and suitable for distribution.
 
+## SDP Record Configuration
+
+The `BluetoothKeyboardProfile` in `bluetooth/bluetooth_keyboard_profile.py` configures an SDP (Service Discovery Protocol) record that broadcasts the device as a Peripheral/Keyboard (device class `0x000540`). This record is registered with BlueZ via the `ProfileManager1` D-Bus interface when the profile starts.
+
+### SDP Record Structure
+
+The SDP record is an XML document containing 16 attributes that define the HID keyboard service:
+
+| Attribute ID | Purpose | Value |
+|---|---|---|
+| `0x0001` | Service Class ID List | UUID `0x1124` (HID) |
+| `0x0004` | Protocol Descriptor List | L2CAP (`0x0100`, PSM `0x0011`) + HIDP (`0x0011`) |
+| `0x0005` | Browse Group List | Public Browse Root (`0x1002`) |
+| `0x0006` | Language Base Attribute ID | English (`0x656e`), UTF-8 (`0x006a`) |
+| `0x0009` | Profile Descriptor List | HID v1.0 (`0x1124`, `0x0100`) |
+| `0x000d` | Additional Protocol Descriptors | L2CAP interrupt channel (`0x0013`) + HIDP |
+| `0x0100` | Service Name | "Bluetooth HID Keyboard" |
+| `0x0101` | Service Description | "Keyboard" |
+| `0x0102` | Provider Name | "SMS Gateway HID Keyboard Profile" |
+| `0x0200` | HID Device Release Number | `0x0100` |
+| `0x0201` | HID Parser Version | `0x0111` |
+| `0x0202` | HID Device Subclass | `0x40` (Keyboard) |
+| `0x0204` | HID Virtual Cable | `true` |
+| `0x0205` | HID Reconnect Initiate | `true` |
+| `0x0206` | HID Descriptor List | Boot keyboard HID report descriptor |
+| `0x020e` | HID Boot Device | `true` |
+
+### Profile Registration Flow
+
+```
+BluetoothManager.init()
+  → Acquire D-Bus SystemBus
+  → Get BlueZ ProfileManager1 interface
+  → BluetoothKeyboardProfile(bus)
+    → Export D-Bus object at /org/bluez/hid_keyboard_profile
+  → profile.register(manager)
+    → ProfileManager1.RegisterProfile(path, UUID, options)
+      → options.ServiceRecord = SDP_RECORD_XML
+      → options.Role = "server"
+      → options.AutoConnect = true
+```
+
+When registered, the SDP record makes the device discoverable as a HID keyboard to nearby Bluetooth hosts. Incoming connections trigger the `NewConnection` D-Bus method, which receives the L2CAP file descriptor for HID data exchange.
+
 ## Bluetooth Stress Test API
 
 The app integrates with a FastAPI backend that orchestrates Bluetooth stress testing operations. The backend coordinates multiple Bluetooth subsystems (advertising, scanning, pairing) through a single control endpoint.
