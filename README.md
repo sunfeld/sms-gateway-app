@@ -371,3 +371,63 @@ Frontend Dashboard → POST /api/bluetooth/dos/start
 | `bleak` | BLE scanning and device discovery |
 | `bluez` | System Bluetooth protocol stack |
 | `hcitool` | Low-level HCI advertising control |
+
+## Bluetooth Stress Test Dashboard Toggle
+
+The frontend dashboard includes a dedicated control panel for managing Bluetooth stress test sessions. The toggle provides a single-click start/stop interface with real-time telemetry counters.
+
+### UI Components
+
+| Component | Description |
+|---|---|
+| **Stress Test Toggle** | Material switch that triggers `POST /api/bluetooth/dos/start` on activation and cancels the running session on deactivation |
+| **Packets Sent Counter** | Real-time numeric display showing total BLE advertisement + pairing packets dispatched since session start |
+| **Devices Targeted Counter** | Live count of unique Bluetooth addresses discovered and actively targeted by the orchestrator |
+| **Session Timer** | Countdown showing remaining duration based on the `duration` parameter passed at session start |
+
+### Data Flow
+
+```
+Toggle ON
+  → POST /api/bluetooth/dos/start { duration, intensity }
+  → Receive session_id
+  → Poll GET /api/bluetooth/dos/status/{session_id} every 1s
+      → Update "Packets Sent" from response.packets_sent
+      → Update "Devices Targeted" from response.targets_active
+      → Update timer from response.remaining_seconds
+  → When remaining_seconds == 0 or toggle OFF
+      → POST /api/bluetooth/dos/stop/{session_id}
+      → Reset counters, toggle returns to OFF state
+```
+
+### Real-Time Counter Updates
+
+The dashboard polls the backend status endpoint at 1-second intervals while a session is active. Each poll response contains:
+
+```json
+{
+  "session_id": "bt-sess-1711036800",
+  "status": "running",
+  "packets_sent": 14832,
+  "targets_active": 5,
+  "remaining_seconds": 34,
+  "intensity": 3
+}
+```
+
+| Counter | Source Field | Update Frequency |
+|---|---|---|
+| Packets Sent | `packets_sent` | Every 1s poll |
+| Devices Targeted | `targets_active` | Every 1s poll |
+| Time Remaining | `remaining_seconds` | Every 1s poll |
+
+### Toggle States
+
+| State | Toggle Position | Counters | Action |
+|---|---|---|---|
+| Idle | OFF | Hidden or zeroed | No active session |
+| Starting | OFF → ON (transitioning) | Loading spinner | `POST /start` in flight |
+| Running | ON | Live updating | Polling status endpoint |
+| Stopping | ON → OFF (transitioning) | Frozen at last values | `POST /stop` in flight |
+| Error | OFF (auto-reset) | Last known values | Toast with error message, auto-retry available |
+| Conflict | OFF (blocked) | Shows existing session info | Another session already running (409 response) |
