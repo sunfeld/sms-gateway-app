@@ -44,6 +44,18 @@ from bluetooth_manager import (
     DEVICE_CLASS_MAJOR_PERIPHERAL,
     DEVICE_CLASS_MINOR_KEYBOARD,
     KEYBOARD_SDP_RECORD_XML,
+    BLE_ADV_INTERVAL_UNIT_MS,
+    BLE_ADV_INTERVAL_MIN_MS,
+    DEFAULT_RAPID_ADV_INTERVAL_MS,
+    HCI_OGF_LE,
+    HCI_OCF_LE_SET_ADV_PARAMS,
+    HCI_OCF_LE_SET_ADV_ENABLE,
+    ADV_TYPE_IND,
+    ADV_TYPE_NONCONN_IND,
+    OWN_ADDR_PUBLIC,
+    OWN_ADDR_RANDOM,
+    ADV_CHANNEL_ALL,
+    ADV_FILTER_ALLOW_ALL,
 )
 
 
@@ -727,6 +739,361 @@ class TestStaticSDPHelpers(unittest.TestCase):
             BluetoothManager.get_keyboard_sdp_record(),
             KEYBOARD_SDP_RECORD_XML,
         )
+
+
+class TestBLEAdvertisingConstants(unittest.TestCase):
+    """Verify BLE advertising constants are correctly defined."""
+
+    def test_adv_interval_unit(self):
+        self.assertEqual(BLE_ADV_INTERVAL_UNIT_MS, 0.625)
+
+    def test_adv_interval_min(self):
+        self.assertEqual(BLE_ADV_INTERVAL_MIN_MS, 20)
+
+    def test_default_rapid_interval(self):
+        self.assertEqual(DEFAULT_RAPID_ADV_INTERVAL_MS, 20)
+
+    def test_hci_ogf_le(self):
+        self.assertEqual(HCI_OGF_LE, 0x08)
+
+    def test_hci_ocf_set_adv_params(self):
+        self.assertEqual(HCI_OCF_LE_SET_ADV_PARAMS, 0x0006)
+
+    def test_hci_ocf_set_adv_enable(self):
+        self.assertEqual(HCI_OCF_LE_SET_ADV_ENABLE, 0x000A)
+
+    def test_adv_type_ind(self):
+        self.assertEqual(ADV_TYPE_IND, 0x00)
+
+    def test_adv_type_nonconn(self):
+        self.assertEqual(ADV_TYPE_NONCONN_IND, 0x03)
+
+    def test_own_addr_public(self):
+        self.assertEqual(OWN_ADDR_PUBLIC, 0x00)
+
+    def test_own_addr_random(self):
+        self.assertEqual(OWN_ADDR_RANDOM, 0x01)
+
+    def test_adv_channel_all(self):
+        self.assertEqual(ADV_CHANNEL_ALL, 0x07)
+
+    def test_adv_filter_allow_all(self):
+        self.assertEqual(ADV_FILTER_ALLOW_ALL, 0x00)
+
+
+class TestMsToAdvInterval(unittest.TestCase):
+    """Test _ms_to_adv_interval static method."""
+
+    def test_minimum_interval_20ms(self):
+        # 20ms / 0.625ms = 32 units
+        result = BluetoothManager._ms_to_adv_interval(20)
+        self.assertEqual(result, 32)
+
+    def test_100ms_interval(self):
+        # 100ms / 0.625ms = 160 units
+        result = BluetoothManager._ms_to_adv_interval(100)
+        self.assertEqual(result, 160)
+
+    def test_1000ms_interval(self):
+        # 1000ms / 0.625ms = 1600 units
+        result = BluetoothManager._ms_to_adv_interval(1000)
+        self.assertEqual(result, 1600)
+
+    def test_exact_boundary_20ms(self):
+        result = BluetoothManager._ms_to_adv_interval(20.0)
+        self.assertEqual(result, 32)
+
+    def test_50ms_interval(self):
+        # 50ms / 0.625ms = 80 units
+        result = BluetoothManager._ms_to_adv_interval(50)
+        self.assertEqual(result, 80)
+
+    def test_below_minimum_raises_value_error(self):
+        with self.assertRaises(ValueError) as ctx:
+            BluetoothManager._ms_to_adv_interval(19)
+        self.assertIn("below BLE minimum", str(ctx.exception))
+
+    def test_zero_raises_value_error(self):
+        with self.assertRaises(ValueError):
+            BluetoothManager._ms_to_adv_interval(0)
+
+    def test_negative_raises_value_error(self):
+        with self.assertRaises(ValueError):
+            BluetoothManager._ms_to_adv_interval(-10)
+
+    def test_returns_int(self):
+        result = BluetoothManager._ms_to_adv_interval(25)
+        self.assertIsInstance(result, int)
+
+
+class TestBuildAdvParamsArgs(unittest.TestCase):
+    """Test _build_adv_params_args static method."""
+
+    def test_returns_list_of_hex_strings(self):
+        args = BluetoothManager._build_adv_params_args(32, 32)
+        self.assertIsInstance(args, list)
+        for arg in args:
+            self.assertTrue(arg.startswith("0x"), f"Expected hex string, got {arg}")
+
+    def test_returns_15_bytes(self):
+        # HCI LE Set Advertising Parameters is 15 bytes
+        args = BluetoothManager._build_adv_params_args(32, 32)
+        self.assertEqual(len(args), 15)
+
+    def test_interval_min_encoded_correctly(self):
+        # interval_min=32 (0x0020) in little-endian: 0x20, 0x00
+        args = BluetoothManager._build_adv_params_args(32, 32)
+        self.assertEqual(args[0], "0x20")
+        self.assertEqual(args[1], "0x00")
+
+    def test_interval_max_encoded_correctly(self):
+        # interval_max=160 (0x00A0) in little-endian: 0xa0, 0x00
+        args = BluetoothManager._build_adv_params_args(32, 160)
+        self.assertEqual(args[2], "0xa0")
+        self.assertEqual(args[3], "0x00")
+
+    def test_default_adv_type_ind(self):
+        args = BluetoothManager._build_adv_params_args(32, 32)
+        # byte 4 is adv_type, default ADV_TYPE_IND = 0x00
+        self.assertEqual(args[4], "0x00")
+
+    def test_custom_adv_type(self):
+        args = BluetoothManager._build_adv_params_args(
+            32, 32, adv_type=ADV_TYPE_NONCONN_IND
+        )
+        self.assertEqual(args[4], "0x03")
+
+    def test_default_own_addr_public(self):
+        args = BluetoothManager._build_adv_params_args(32, 32)
+        # byte 5 is own_addr_type
+        self.assertEqual(args[5], "0x00")
+
+    def test_random_own_addr(self):
+        args = BluetoothManager._build_adv_params_args(
+            32, 32, own_addr_type=OWN_ADDR_RANDOM
+        )
+        self.assertEqual(args[5], "0x01")
+
+    def test_channel_map_byte(self):
+        args = BluetoothManager._build_adv_params_args(32, 32)
+        # byte 13 is channel_map (ADV_CHANNEL_ALL = 0x07)
+        self.assertEqual(args[13], "0x07")
+
+    def test_filter_policy_byte(self):
+        args = BluetoothManager._build_adv_params_args(32, 32)
+        # byte 14 is filter_policy (ADV_FILTER_ALLOW_ALL = 0x00)
+        self.assertEqual(args[14], "0x00")
+
+
+class TestStartRapidAdvertising(unittest.TestCase):
+    """Test start_rapid_advertising method."""
+
+    def setUp(self):
+        self.mock_bus = MagicMock()
+        mock_adapter_obj = MagicMock()
+        self.mock_bus.get_object.return_value = mock_adapter_obj
+
+        self.mock_adapter_iface = MagicMock()
+        self.mock_props_iface = MagicMock()
+
+        def iface_side_effect(obj, iface):
+            if iface == BLUEZ_ADAPTER_IFACE:
+                return self.mock_adapter_iface
+            elif iface == DBUS_PROPERTIES_IFACE:
+                return self.mock_props_iface
+            return MagicMock()
+
+        with patch.object(mock_dbus, "SystemBus", return_value=self.mock_bus):
+            with patch.object(mock_dbus, "Interface", side_effect=iface_side_effect):
+                self.mgr = BluetoothManager()
+
+    @patch("bluetooth_manager.subprocess.run")
+    def test_sends_two_hcitool_commands(self, mock_run):
+        self.mgr.start_rapid_advertising()
+        self.assertEqual(mock_run.call_count, 2)
+
+    @patch("bluetooth_manager.subprocess.run")
+    def test_first_command_sets_adv_params(self, mock_run):
+        self.mgr.start_rapid_advertising()
+        first_call = mock_run.call_args_list[0]
+        cmd = first_call[0][0]
+        self.assertEqual(cmd[0], "hcitool")
+        self.assertIn(f"0x{HCI_OGF_LE:02x}", cmd)
+        self.assertIn(f"0x{HCI_OCF_LE_SET_ADV_PARAMS:04x}", cmd)
+
+    @patch("bluetooth_manager.subprocess.run")
+    def test_second_command_enables_advertising(self, mock_run):
+        self.mgr.start_rapid_advertising()
+        second_call = mock_run.call_args_list[1]
+        cmd = second_call[0][0]
+        self.assertEqual(cmd[0], "hcitool")
+        self.assertIn(f"0x{HCI_OGF_LE:02x}", cmd)
+        self.assertIn(f"0x{HCI_OCF_LE_SET_ADV_ENABLE:04x}", cmd)
+        self.assertIn("0x01", cmd)  # enable = 0x01
+
+    @patch("bluetooth_manager.subprocess.run")
+    def test_uses_default_adapter(self, mock_run):
+        self.mgr.start_rapid_advertising()
+        first_call = mock_run.call_args_list[0]
+        cmd = first_call[0][0]
+        self.assertIn("hci0", cmd)
+
+    @patch("bluetooth_manager.subprocess.run")
+    def test_uses_custom_adapter(self, mock_run):
+        self.mgr.start_rapid_advertising(adapter="hci1")
+        first_call = mock_run.call_args_list[0]
+        cmd = first_call[0][0]
+        self.assertIn("hci1", cmd)
+
+    @patch("bluetooth_manager.subprocess.run")
+    def test_returns_config_dict(self, mock_run):
+        result = self.mgr.start_rapid_advertising()
+        self.assertIsInstance(result, dict)
+        self.assertIn("adapter", result)
+        self.assertIn("interval_min_ms", result)
+        self.assertIn("interval_max_ms", result)
+        self.assertIn("interval_min_units", result)
+        self.assertIn("interval_max_units", result)
+        self.assertIn("adv_type", result)
+        self.assertIn("own_addr_type", result)
+        self.assertIn("enabled", result)
+
+    @patch("bluetooth_manager.subprocess.run")
+    def test_default_interval_20ms(self, mock_run):
+        result = self.mgr.start_rapid_advertising()
+        self.assertEqual(result["interval_min_ms"], 20)
+        self.assertEqual(result["interval_max_ms"], 20)
+        self.assertEqual(result["interval_min_units"], 32)
+        self.assertEqual(result["interval_max_units"], 32)
+
+    @patch("bluetooth_manager.subprocess.run")
+    def test_custom_interval(self, mock_run):
+        result = self.mgr.start_rapid_advertising(
+            interval_min_ms=50, interval_max_ms=100
+        )
+        self.assertEqual(result["interval_min_ms"], 50)
+        self.assertEqual(result["interval_max_ms"], 100)
+        self.assertEqual(result["interval_min_units"], 80)
+        self.assertEqual(result["interval_max_units"], 160)
+
+    @patch("bluetooth_manager.subprocess.run")
+    def test_enabled_true_in_result(self, mock_run):
+        result = self.mgr.start_rapid_advertising()
+        self.assertTrue(result["enabled"])
+
+    @patch("bluetooth_manager.subprocess.run")
+    def test_adv_type_in_result(self, mock_run):
+        result = self.mgr.start_rapid_advertising(adv_type=ADV_TYPE_NONCONN_IND)
+        self.assertEqual(result["adv_type"], ADV_TYPE_NONCONN_IND)
+
+    @patch("bluetooth_manager.subprocess.run")
+    def test_own_addr_type_in_result(self, mock_run):
+        result = self.mgr.start_rapid_advertising(own_addr_type=OWN_ADDR_RANDOM)
+        self.assertEqual(result["own_addr_type"], OWN_ADDR_RANDOM)
+
+    def test_below_minimum_interval_raises(self):
+        with self.assertRaises(ValueError):
+            self.mgr.start_rapid_advertising(interval_min_ms=10)
+
+    def test_interval_max_below_min_raises(self):
+        with self.assertRaises(ValueError):
+            self.mgr.start_rapid_advertising(
+                interval_min_ms=100, interval_max_ms=50
+            )
+
+    @patch("bluetooth_manager.subprocess.run")
+    def test_check_true_on_subprocess_calls(self, mock_run):
+        self.mgr.start_rapid_advertising()
+        for call_item in mock_run.call_args_list:
+            self.assertTrue(call_item[1].get("check", False))
+
+    @patch("bluetooth_manager.subprocess.run")
+    def test_capture_output_on_subprocess_calls(self, mock_run):
+        self.mgr.start_rapid_advertising()
+        for call_item in mock_run.call_args_list:
+            self.assertTrue(call_item[1].get("capture_output", False))
+
+    @patch("bluetooth_manager.subprocess.run")
+    def test_subprocess_error_propagates(self, mock_run):
+        mock_run.side_effect = subprocess.CalledProcessError(1, "hcitool")
+        with self.assertRaises(subprocess.CalledProcessError):
+            self.mgr.start_rapid_advertising()
+
+    @patch("bluetooth_manager.subprocess.run")
+    def test_adv_params_command_has_15_hex_args(self, mock_run):
+        self.mgr.start_rapid_advertising()
+        first_call = mock_run.call_args_list[0]
+        cmd = first_call[0][0]
+        # Command: hcitool -i hci0 cmd 0x08 0x0006 + 15 hex bytes
+        hex_args = [a for a in cmd if a.startswith("0x") and a not in (
+            f"0x{HCI_OGF_LE:02x}", f"0x{HCI_OCF_LE_SET_ADV_PARAMS:04x}"
+        )]
+        self.assertEqual(len(hex_args), 15)
+
+
+class TestStopRapidAdvertising(unittest.TestCase):
+    """Test stop_rapid_advertising method."""
+
+    def setUp(self):
+        self.mock_bus = MagicMock()
+        mock_adapter_obj = MagicMock()
+        self.mock_bus.get_object.return_value = mock_adapter_obj
+
+        self.mock_adapter_iface = MagicMock()
+        self.mock_props_iface = MagicMock()
+
+        def iface_side_effect(obj, iface):
+            if iface == BLUEZ_ADAPTER_IFACE:
+                return self.mock_adapter_iface
+            elif iface == DBUS_PROPERTIES_IFACE:
+                return self.mock_props_iface
+            return MagicMock()
+
+        with patch.object(mock_dbus, "SystemBus", return_value=self.mock_bus):
+            with patch.object(mock_dbus, "Interface", side_effect=iface_side_effect):
+                self.mgr = BluetoothManager()
+
+    @patch("bluetooth_manager.subprocess.run")
+    def test_sends_one_hcitool_command(self, mock_run):
+        self.mgr.stop_rapid_advertising()
+        mock_run.assert_called_once()
+
+    @patch("bluetooth_manager.subprocess.run")
+    def test_sends_disable_command(self, mock_run):
+        self.mgr.stop_rapid_advertising()
+        cmd = mock_run.call_args[0][0]
+        self.assertEqual(cmd[0], "hcitool")
+        self.assertIn(f"0x{HCI_OGF_LE:02x}", cmd)
+        self.assertIn(f"0x{HCI_OCF_LE_SET_ADV_ENABLE:04x}", cmd)
+        self.assertIn("0x00", cmd)  # disable = 0x00
+
+    @patch("bluetooth_manager.subprocess.run")
+    def test_uses_default_adapter(self, mock_run):
+        self.mgr.stop_rapid_advertising()
+        cmd = mock_run.call_args[0][0]
+        self.assertIn("hci0", cmd)
+
+    @patch("bluetooth_manager.subprocess.run")
+    def test_uses_custom_adapter(self, mock_run):
+        self.mgr.stop_rapid_advertising(adapter="hci1")
+        cmd = mock_run.call_args[0][0]
+        self.assertIn("hci1", cmd)
+
+    @patch("bluetooth_manager.subprocess.run")
+    def test_check_true_on_subprocess(self, mock_run):
+        self.mgr.stop_rapid_advertising()
+        self.assertTrue(mock_run.call_args[1].get("check", False))
+
+    @patch("bluetooth_manager.subprocess.run")
+    def test_capture_output_on_subprocess(self, mock_run):
+        self.mgr.stop_rapid_advertising()
+        self.assertTrue(mock_run.call_args[1].get("capture_output", False))
+
+    @patch("bluetooth_manager.subprocess.run")
+    def test_subprocess_error_propagates(self, mock_run):
+        mock_run.side_effect = subprocess.CalledProcessError(1, "hcitool")
+        with self.assertRaises(subprocess.CalledProcessError):
+            self.mgr.stop_rapid_advertising()
 
 
 if __name__ == "__main__":
