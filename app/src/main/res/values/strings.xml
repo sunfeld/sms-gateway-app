@@ -1,4 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">SMS Gateway</string>
+    <string name="install_gateway">Install Gateway</string>
+    <string name="installing_gateway">Installing…</string>
+    <string name="retry_install_gateway">Retry Install</string>
 </resources>
