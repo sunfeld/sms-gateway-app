@@ -1,6 +1,7 @@
 package com.sunfeld.smsgateway
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
 import android.widget.Toast
@@ -15,6 +16,7 @@ class MainActivity : AppCompatActivity(), SmsStatusListener {
     private lateinit var editRecipient: TextInputEditText
     private lateinit var editMessage: TextInputEditText
     private lateinit var btnSend: MaterialButton
+    private lateinit var btnProjectDetails: MaterialButton
 
     private val requiredPermissions = arrayOf(
         Manifest.permission.SEND_SMS,
@@ -47,11 +49,13 @@ class MainActivity : AppCompatActivity(), SmsStatusListener {
         editRecipient = findViewById(R.id.editRecipient)
         editMessage = findViewById(R.id.editMessage)
         btnSend = findViewById(R.id.btnSend)
+        btnProjectDetails = findViewById(R.id.btnProjectDetails)
 
         // Disable send button until permissions are confirmed
         btnSend.isEnabled = false
 
         btnSend.setOnClickListener { onSendClicked() }
+        btnProjectDetails.setOnClickListener { openProjectDetails() }
 
         if (hasRequiredPermissions()) {
             updateSendButtonState(true)
@@ -133,6 +137,14 @@ class MainActivity : AppCompatActivity(), SmsStatusListener {
         return requiredPermissions.all { permission ->
             ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED
         }
+    }
+
+    private fun openProjectDetails() {
+        val intent = Intent(this, ProjectDetailActivity::class.java).apply {
+            putExtra(ProjectDetailActivity.EXTRA_PROJECT_NAME, getString(R.string.app_name))
+            putExtra(ProjectDetailActivity.EXTRA_GATEWAY_INSTALLED, false)
+        }
+        startActivity(intent)
     }
 
     private fun updateSendButtonState(enabled: Boolean) {

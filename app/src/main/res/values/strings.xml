@@ -4,4 +4,8 @@
     <string name="install_gateway">Install Gateway</string>
     <string name="installing_gateway">Installing…</string>
     <string name="retry_install_gateway">Retry Install</string>
+    <string name="project_detail_title">Project Details</string>
+    <string name="gateway_status_installed">SMS Gateway: Installed</string>
+    <string name="gateway_status_not_installed">SMS Gateway: Not Installed</string>
+    <string name="project_details">Project Details</string>
 </resources>
