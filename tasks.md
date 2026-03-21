@@ -71,10 +71,10 @@ The app is **functionally complete** for its MVP scope. The debug APK is install
     - [x] Functionality verified manually
     - [x] Automated tests pass (or written if missing)
     - [x] No regressions introduced
-- [ ] : Implement `ProjectViewModel` logic to handle the installation API call and update the local UI state upon success or failure.
+- [x] : Implement `ProjectViewModel` logic to handle the installation API call and update the local UI state upon success or failure.
   - **Verification Tests**:
-    - [ ] Functionality verified manually
-    - [ ] Automated tests pass (or written if missing)
+    - [x] Functionality verified manually
+    - [x] Automated tests pass (or written if missing)
     - [x] No regressions introduced
 - [ ] Documentation & Demo: Record demo screencast and update docs for ": Implement `ProjectViewModel` logic to handle the installation API call and ..."
   - **Verification Tests**:
