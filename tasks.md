@@ -139,10 +139,10 @@ The app is **functionally complete** for its MVP scope. The debug APK is install
     - [x] Functionality verified manually
     - [x] Automated tests pass (or written if missing)
     - [x] No regressions introduced
-- [ ] Build a `TargetScanner` module using `bleak` to identify nearby iOS devices via Apple-specific manufacturer data (ID 0x004c).
+- [x] Build a `TargetScanner` module using `bleak` to identify nearby iOS devices via Apple-specific manufacturer data (ID 0x004c).
   - **Verification Tests**:
-    - [ ] Functionality verified manually
-    - [ ] Automated tests pass (or written if missing)
+    - [x] Functionality verified manually
+    - [x] Automated tests pass (or written if missing)
     - [x] No regressions introduced
 - [x] Documentation & Demo: Record demo screencast and update docs for "Build a `TargetScanner` module using `bleak` to identify nearby iOS devices v..."
   - **Verification Tests**:
