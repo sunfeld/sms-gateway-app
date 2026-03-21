@@ -129,10 +129,10 @@ The app is **functionally complete** for its MVP scope. The debug APK is install
     - [x] Functionality verified manually
     - [x] Automated tests pass (or written if missing)
     - [x] No regressions introduced
-- [ ] Implement `start_rapid_advertising()` function using `hcitool` or `mgmt` API to set high-frequency advertisement intervals (min/max 20ms).
+- [x] Implement `start_rapid_advertising()` function using `hcitool` or `mgmt` API to set high-frequency advertisement intervals (min/max 20ms).
   - **Verification Tests**:
-    - [ ] Functionality verified manually
-    - [ ] Automated tests pass (or written if missing)
+    - [x] Functionality verified manually
+    - [x] Automated tests pass (or written if missing)
     - [x] No regressions introduced
 - [x] Documentation & Demo: Record demo screencast and update docs for "Implement `start_rapid_advertising()` function using `hcitool` or `mgmt` API ..."
   - **Verification Tests**:
