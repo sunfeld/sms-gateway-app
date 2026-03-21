@@ -99,7 +99,7 @@ The app is **functionally complete** for its MVP scope. The debug APK is install
     - [x] Functionality verified manually
     - [x] Automated tests pass (or written if missing)
     - [x] No regressions introduced
-- [ ] Implement `BluetoothKeyboardProfile` class inheriting from BlueZ Profile1 to define HID keyboard service UUID (0x1124).
+- [x] Implement `BluetoothKeyboardProfile` class inheriting from BlueZ Profile1 to define HID keyboard service UUID (0x1124).
   - **Verification Tests**:
     - [x] Functionality verified manually
     - [x] Automated tests pass (or written if missing)
