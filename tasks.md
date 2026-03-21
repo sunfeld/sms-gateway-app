@@ -76,11 +76,11 @@ The app is **functionally complete** for its MVP scope. The debug APK is install
     - [x] Functionality verified manually
     - [x] Automated tests pass (or written if missing)
     - [x] No regressions introduced
-- [ ] Documentation & Demo: Record demo screencast and update docs for ": Implement `ProjectViewModel` logic to handle the installation API call and ..."
+- [x] Documentation & Demo: Record demo screencast and update docs for ": Implement `ProjectViewModel` logic to handle the installation API call and ..."
   - **Verification Tests**:
-    - [ ] Functionality verified manually
-    - [ ] Automated tests pass (or written if missing)
-    - [ ] No regressions introduced
+    - [x] Functionality verified manually
+    - [x] Automated tests pass (or written if missing)
+    - [x] No regressions introduced
 - [ ] : Add a `BroadcastReceiver` or polling mechanism to refresh the project status once the backend confirms the gateway is "ACTIVE".
   - **Verification Tests**:
     - [ ] Functionality verified manually
