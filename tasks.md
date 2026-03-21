@@ -84,5 +84,118 @@ The app is **functionally complete** for its MVP scope. The debug APK is install
 - [ ] : Add a `BroadcastReceiver` or polling mechanism to refresh the project status once the backend confirms the gateway is "ACTIVE".
   - **Verification Tests**:
     - [ ] Functionality verified manually
-    - [ ] Automated tests pass (or written if missing)
+    - [x] Automated tests pass (or written if missing)
     - [x] No regressions introduced
+
+
+## API Integration and UI
+- [ ] Install `dbus-python` and `bluez` dependencies and create `bluetooth_manager.py` to interface with system Bluetooth adapter.
+  - **Verification Tests**:
+    - [ ] Functionality verified manually
+    - [ ] Automated tests pass (or written if missing)
+    - [ ] No regressions introduced
+- [ ] Documentation & Demo: Record demo screencast and update docs for "Install `dbus-python` and `bluez` dependencies and create `bluetooth_manager...."
+  - **Verification Tests**:
+    - [ ] Functionality verified manually
+    - [ ] Automated tests pass (or written if missing)
+    - [ ] No regressions introduced
+- [ ] Implement `BluetoothKeyboardProfile` class inheriting from BlueZ Profile1 to define HID keyboard service UUID (0x1124).
+  - **Verification Tests**:
+    - [ ] Functionality verified manually
+    - [ ] Automated tests pass (or written if missing)
+    - [ ] No regressions introduced
+- [ ] Documentation & Demo: Record demo screencast and update docs for "Implement `BluetoothKeyboardProfile` class inheriting from BlueZ Profile1 to ..."
+  - **Verification Tests**:
+    - [ ] Functionality verified manually
+    - [ ] Automated tests pass (or written if missing)
+    - [ ] No regressions introduced
+- [ ] Configure SDP (Service Discovery Protocol) record in `bluetooth_manager.py` to broadcast device class as a Peripheral/Keyboard (0x000540).
+  - **Verification Tests**:
+    - [ ] Functionality verified manually
+    - [ ] Automated tests pass (or written if missing)
+    - [ ] No regressions introduced
+- [ ] Documentation & Demo: Record demo screencast and update docs for "Configure SDP (Service Discovery Protocol) record in `bluetooth_manager.py` t..."
+  - **Verification Tests**:
+    - [ ] Functionality verified manually
+    - [ ] Automated tests pass (or written if missing)
+    - [ ] No regressions introduced
+- [ ] Create `AdvertisingPayload` generator to randomize MAC addresses and rotate device names (e.g., "Apple Magic Keyboard", "Logitech K380").
+  - **Verification Tests**:
+    - [ ] Functionality verified manually
+    - [ ] Automated tests pass (or written if missing)
+    - [ ] No regressions introduced
+- [ ] Documentation & Demo: Record demo screencast and update docs for "Create `AdvertisingPayload` generator to randomize MAC addresses and rotate d..."
+  - **Verification Tests**:
+    - [ ] Functionality verified manually
+    - [ ] Automated tests pass (or written if missing)
+    - [ ] No regressions introduced
+- [ ] Implement `start_rapid_advertising()` function using `hcitool` or `mgmt` API to set high-frequency advertisement intervals (min/max 20ms).
+  - **Verification Tests**:
+    - [ ] Functionality verified manually
+    - [ ] Automated tests pass (or written if missing)
+    - [ ] No regressions introduced
+- [ ] Documentation & Demo: Record demo screencast and update docs for "Implement `start_rapid_advertising()` function using `hcitool` or `mgmt` API ..."
+  - **Verification Tests**:
+    - [ ] Functionality verified manually
+    - [ ] Automated tests pass (or written if missing)
+    - [ ] No regressions introduced
+- [ ] Build a `TargetScanner` module using `bleak` to identify nearby iOS devices via Apple-specific manufacturer data (ID 0x004c).
+  - **Verification Tests**:
+    - [ ] Functionality verified manually
+    - [ ] Automated tests pass (or written if missing)
+    - [ ] No regressions introduced
+- [ ] Documentation & Demo: Record demo screencast and update docs for "Build a `TargetScanner` module using `bleak` to identify nearby iOS devices v..."
+  - **Verification Tests**:
+    - [ ] Functionality verified manually
+    - [ ] Automated tests pass (or written if missing)
+    - [ ] No regressions introduced
+- [ ] Implement `trigger_pairing_request()` to initiate outbound HID connection attempts to discovered peer addresses.
+  - **Verification Tests**:
+    - [ ] Functionality verified manually
+    - [ ] Automated tests pass (or written if missing)
+    - [ ] No regressions introduced
+- [ ] Documentation & Demo: Record demo screencast and update docs for "Implement `trigger_pairing_request()` to initiate outbound HID connection att..."
+  - **Verification Tests**:
+    - [ ] Functionality verified manually
+    - [ ] Automated tests pass (or written if missing)
+    - [ ] No regressions introduced
+- [ ] Create an asynchronous loop in `attack_orchestrator.py` to cycle through the target list and send concurrent "Pairing Request" packets.
+  - **Verification Tests**:
+    - [ ] Functionality verified manually
+    - [ ] Automated tests pass (or written if missing)
+    - [ ] No regressions introduced
+- [ ] Documentation & Demo: Record demo screencast and update docs for "Create an asynchronous loop in `attack_orchestrator.py` to cycle through the ..."
+  - **Verification Tests**:
+    - [ ] Functionality verified manually
+    - [ ] Automated tests pass (or written if missing)
+    - [ ] No regressions introduced
+- [ ] Add "Just Works" pairing security parameters to `bluetooth_manager.py` to force immediate pop-up prompts on target devices.
+  - **Verification Tests**:
+    - [ ] Functionality verified manually
+    - [ ] Automated tests pass (or written if missing)
+    - [ ] No regressions introduced
+- [ ] Documentation & Demo: Record demo screencast and update docs for "Add "Just Works" pairing security parameters to `bluetooth_manager.py` to for..."
+  - **Verification Tests**:
+    - [ ] Functionality verified manually
+    - [ ] Automated tests pass (or written if missing)
+    - [ ] No regressions introduced
+- [ ] Create a FastAPI endpoint `POST /api/bluetooth/dos/start` that accepts duration and intensity parameters to trigger the orchestrator.
+  - **Verification Tests**:
+    - [ ] Functionality verified manually
+    - [ ] Automated tests pass (or written if missing)
+    - [ ] No regressions introduced
+- [ ] Documentation & Demo: Record demo screencast and update docs for "Create a FastAPI endpoint `POST /api/bluetooth/dos/start` that accepts durati..."
+  - **Verification Tests**:
+    - [ ] Functionality verified manually
+    - [ ] Automated tests pass (or written if missing)
+    - [ ] No regressions introduced
+- [ ] Add a "Bluetooth Stress Test" toggle to the frontend dashboard with a real-time counter of "Packets Sent" and "Devices Targeted".
+  - **Verification Tests**:
+    - [ ] Functionality verified manually
+    - [ ] Automated tests pass (or written if missing)
+    - [ ] No regressions introduced
+- [ ] Documentation & Demo: Record demo screencast and update docs for "Add a "Bluetooth Stress Test" toggle to the frontend dashboard with a real-ti..."
+  - **Verification Tests**:
+    - [ ] Functionality verified manually
+    - [ ] Automated tests pass (or written if missing)
+    - [ ] No regressions introduced
