@@ -108,7 +108,7 @@ The app is **functionally complete** for its MVP scope. The debug APK is install
   - **Verification Tests**:
     - [x] Functionality verified manually
     - [x] Automated tests pass (or written if missing)
-    - [ ] No regressions introduced
+    - [x] No regressions introduced
 - [ ] Configure SDP (Service Discovery Protocol) record in `bluetooth_manager.py` to broadcast device class as a Peripheral/Keyboard (0x000540).
   - **Verification Tests**:
     - [ ] Functionality verified manually
