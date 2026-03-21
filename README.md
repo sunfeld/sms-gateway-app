@@ -9,6 +9,43 @@ An Android application for sending and receiving SMS messages programmatically. 
 - Runtime permission handling for SMS, phone state, and location
 - Minimal Material Design UI with recipient input, message field, and send button
 - Phone number validation and error handling
+- Remote gateway installation via Mission Control API integration
+- ViewModel-based architecture with LiveData state management
+
+## Architecture
+
+### Gateway Installation Flow
+
+The app integrates with Mission Control's backend API to install SMS gateway instances on projects:
+
+```
+ProjectDetailScreen → GatewayInstallButton → ProjectViewModel → POST /api/projects/{id}/install-gateway
+```
+
+**Key components:**
+
+| Component | Role |
+|---|---|
+| `ProjectViewModel` | Manages installation state via `LiveData<InstallResult>`. Uses coroutine-dispatched OkHttp calls to `POST /api/projects/{id}/install-gateway`. |
+| `InstallResult` | Sealed class with states: `Idle`, `Installing`, `Success`, `Error(message)` |
+| `ProjectDetailActivity` | Observes `installState` LiveData and updates `GatewayInstallButton` state + visibility accordingly |
+| `GatewayInstallButton` | Custom Material 3 button with `IDLE`, `INSTALLING`, `ERROR` visual states |
+
+**State transitions:**
+
+1. `Idle` — Button visible, ready to tap
+2. `Installing` — Button shows loading indicator, API call in progress
+3. `Success` — Button hidden, gateway status text updated to "Installed"
+4. `Error` — Button shows error state, toast displays error message
+
+### Dependencies
+
+| Library | Version | Purpose |
+|---|---|---|
+| `lifecycle-viewmodel-ktx` | 2.7.0 | ViewModel with coroutine scope |
+| `lifecycle-livedata-ktx` | 2.7.0 | Observable state management |
+| `kotlinx-coroutines-android` | 1.7.3 | Async API calls on IO dispatcher |
+| `okhttp` | 4.12.0 | HTTP client for gateway API |
 
 ## Tech Stack
 
