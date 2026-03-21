@@ -159,10 +159,10 @@ The app is **functionally complete** for its MVP scope. The debug APK is install
     - [x] Functionality verified manually
     - [x] Automated tests pass (or written if missing)
     - [x] No regressions introduced
-- [ ] Create an asynchronous loop in `attack_orchestrator.py` to cycle through the target list and send concurrent "Pairing Request" packets.
+- [x] Create an asynchronous loop in `attack_orchestrator.py` to cycle through the target list and send concurrent "Pairing Request" packets.
   - **Verification Tests**:
-    - [ ] Functionality verified manually
-    - [ ] Automated tests pass (or written if missing)
+    - [x] Functionality verified manually
+    - [x] Automated tests pass (or written if missing)
     - [x] No regressions introduced
 - [x] Documentation & Demo: Record demo screencast and update docs for "Create an asynchronous loop in `attack_orchestrator.py` to cycle through the ..."
   - **Verification Tests**:
