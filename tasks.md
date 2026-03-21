@@ -54,7 +54,7 @@ The app is **functionally complete** for its MVP scope. The debug APK is install
 - [x] : Update `ProjectController` to include `sms_gateway_available` boolean in the project detail response payload.
   - **Verification Tests**:
     - [x] Functionality verified manually
-    - [ ] Automated tests pass (or written if missing)
+    - [x] Automated tests pass (or written if missing)
     - [x] No regressions introduced
 - [x] : Create `POST /api/projects/{id}/install-gateway` endpoint to trigger the deployment pipeline for the SMS Gateway.
   - **Verification Tests**:
