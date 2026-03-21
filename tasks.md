@@ -55,7 +55,7 @@ The app is **functionally complete** for its MVP scope. The debug APK is install
   - **Verification Tests**:
     - [x] Functionality verified manually
     - [ ] Automated tests pass (or written if missing)
-    - [ ] No regressions introduced
+    - [x] No regressions introduced
 - [ ] : Create `POST /api/projects/{id}/install-gateway` endpoint to trigger the deployment pipeline for the SMS Gateway.
   - **Verification Tests**:
     - [ ] Functionality verified manually
