@@ -69,7 +69,7 @@ The app is **functionally complete** for its MVP scope. The debug APK is install
 - [x] : Integrate `GatewayInstallButton` into the `ProjectDetailScreen` layout, ensuring visibility when `sms_gateway_installed` is false.
   - **Verification Tests**:
     - [x] Functionality verified manually
-    - [ ] Automated tests pass (or written if missing)
+    - [x] Automated tests pass (or written if missing)
     - [x] No regressions introduced
 - [ ] : Implement `ProjectViewModel` logic to handle the installation API call and update the local UI state upon success or failure.
   - **Verification Tests**:
