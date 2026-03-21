@@ -9,6 +9,7 @@ downstream modules (attack_orchestrator, TargetScanner, etc.).
 import dbus
 import dbus.mainloop.glib
 import logging
+import struct
 import subprocess
 from typing import Optional
 
@@ -22,6 +23,32 @@ BLUEZ_PROFILE_MANAGER_IFACE = "org.bluez.ProfileManager1"
 BLUEZ_AGENT_MANAGER_IFACE = "org.bluez.AgentManager1"
 DBUS_PROPERTIES_IFACE = "org.freedesktop.DBus.Properties"
 DBUS_OBJECT_MANAGER_IFACE = "org.freedesktop.DBus.ObjectManager"
+
+# BLE Advertising interval unit: 0.625ms
+# HCI LE command group (OGF 0x08)
+HCI_OGF_LE = 0x08
+# LE Set Advertising Parameters (OCF 0x0006)
+HCI_OCF_LE_SET_ADV_PARAMS = 0x0006
+# LE Set Advertise Enable (OCF 0x000A)
+HCI_OCF_LE_SET_ADV_ENABLE = 0x000A
+# BLE advertising interval unit in milliseconds
+BLE_ADV_INTERVAL_UNIT_MS = 0.625
+# Minimum BLE advertising interval allowed by spec (20ms = 32 units)
+BLE_ADV_INTERVAL_MIN_MS = 20
+# Default rapid advertising interval in ms
+DEFAULT_RAPID_ADV_INTERVAL_MS = 20
+# Advertising types
+ADV_TYPE_IND = 0x00  # Connectable undirected
+ADV_TYPE_DIRECT_IND_HIGH = 0x01  # Connectable directed (high duty)
+ADV_TYPE_SCAN_IND = 0x02  # Scannable undirected
+ADV_TYPE_NONCONN_IND = 0x03  # Non-connectable undirected
+# Own address types
+OWN_ADDR_PUBLIC = 0x00
+OWN_ADDR_RANDOM = 0x01
+# Channel map: all three advertising channels (37, 38, 39)
+ADV_CHANNEL_ALL = 0x07
+# Filter policy: allow scan/connect from any device
+ADV_FILTER_ALLOW_ALL = 0x00
 
 # Bluetooth Class of Device (CoD) — Peripheral/Keyboard
 # 0x000540 = Major: Peripheral (0x05), Minor: Keyboard (0x40)
@@ -381,6 +408,183 @@ class BluetoothManager:
         """Reset the Bluetooth adapter via hciconfig."""
         subprocess.run(["hciconfig", adapter, "reset"], check=True, capture_output=True)
         logger.info("Reset adapter %s", adapter)
+
+    # ── BLE Rapid Advertising ─────────────────────────────────────────
+
+    @staticmethod
+    def _ms_to_adv_interval(ms: float) -> int:
+        """
+        Convert milliseconds to BLE advertising interval units (0.625ms each).
+
+        Args:
+            ms: Interval in milliseconds (minimum 20ms per BLE spec).
+
+        Returns:
+            Interval value in 0.625ms units.
+
+        Raises:
+            ValueError: If interval is below the BLE minimum (20ms).
+        """
+        if ms < BLE_ADV_INTERVAL_MIN_MS:
+            raise ValueError(
+                f"Advertising interval {ms}ms is below BLE minimum "
+                f"({BLE_ADV_INTERVAL_MIN_MS}ms)"
+            )
+        return int(ms / BLE_ADV_INTERVAL_UNIT_MS)
+
+    @staticmethod
+    def _build_adv_params_args(
+        interval_min: int,
+        interval_max: int,
+        adv_type: int = ADV_TYPE_IND,
+        own_addr_type: int = OWN_ADDR_PUBLIC,
+        peer_addr_type: int = 0x00,
+        peer_addr: bytes = b"\x00" * 6,
+        channel_map: int = ADV_CHANNEL_ALL,
+        filter_policy: int = ADV_FILTER_ALLOW_ALL,
+    ) -> list[str]:
+        """
+        Build the hex byte arguments for LE Set Advertising Parameters.
+
+        The HCI command (OGF 0x08, OCF 0x0006) expects 15 bytes:
+          - Advertising_Interval_Min: 2 bytes LE
+          - Advertising_Interval_Max: 2 bytes LE
+          - Advertising_Type: 1 byte
+          - Own_Address_Type: 1 byte
+          - Peer_Address_Type: 1 byte
+          - Peer_Address: 6 bytes
+          - Advertising_Channel_Map: 1 byte
+          - Advertising_Filter_Policy: 1 byte
+
+        Returns:
+            List of hex byte strings for hcitool cmd.
+        """
+        params = struct.pack(
+            "<HHBBb6sBB",
+            interval_min,
+            interval_max,
+            adv_type,
+            own_addr_type,
+            peer_addr_type,
+            peer_addr,
+            channel_map,
+            filter_policy,
+        )
+        return [f"0x{b:02x}" for b in params]
+
+    def start_rapid_advertising(
+        self,
+        interval_min_ms: float = DEFAULT_RAPID_ADV_INTERVAL_MS,
+        interval_max_ms: float = DEFAULT_RAPID_ADV_INTERVAL_MS,
+        adv_type: int = ADV_TYPE_IND,
+        own_addr_type: int = OWN_ADDR_PUBLIC,
+        adapter: Optional[str] = None,
+    ) -> dict:
+        """
+        Start BLE advertising with high-frequency intervals.
+
+        Uses hcitool to send raw HCI LE commands:
+        1. LE Set Advertising Parameters (OCF 0x0006) — sets min/max interval
+        2. LE Set Advertise Enable (OCF 0x000A) — enables advertising
+
+        Args:
+            interval_min_ms: Minimum advertising interval in ms (default 20ms).
+            interval_max_ms: Maximum advertising interval in ms (default 20ms).
+            adv_type: BLE advertising type (default: ADV_IND connectable).
+            own_addr_type: Own address type (0x00=public, 0x01=random).
+            adapter: Adapter name override (default: instance adapter).
+
+        Returns:
+            Dict with advertising configuration details.
+
+        Raises:
+            ValueError: If interval is below BLE minimum (20ms).
+            subprocess.CalledProcessError: If hcitool command fails.
+        """
+        adapter = adapter or self._adapter_name
+
+        # Convert ms to BLE interval units (0.625ms each)
+        interval_min = self._ms_to_adv_interval(interval_min_ms)
+        interval_max = self._ms_to_adv_interval(interval_max_ms)
+
+        if interval_max < interval_min:
+            raise ValueError(
+                f"interval_max ({interval_max_ms}ms) must be >= "
+                f"interval_min ({interval_min_ms}ms)"
+            )
+
+        logger.info(
+            "Setting rapid advertising on %s: interval %d-%d units (%.1f-%.1fms)",
+            adapter,
+            interval_min,
+            interval_max,
+            interval_min_ms,
+            interval_max_ms,
+        )
+
+        # Build advertising parameters
+        param_args = self._build_adv_params_args(
+            interval_min=interval_min,
+            interval_max=interval_max,
+            adv_type=adv_type,
+            own_addr_type=own_addr_type,
+        )
+
+        # Send LE Set Advertising Parameters via hcitool
+        adv_params_cmd = [
+            "hcitool", "-i", adapter, "cmd",
+            f"0x{HCI_OGF_LE:02x}",
+            f"0x{HCI_OCF_LE_SET_ADV_PARAMS:04x}",
+        ] + param_args
+
+        subprocess.run(adv_params_cmd, check=True, capture_output=True)
+        logger.info("LE Set Advertising Parameters sent on %s", adapter)
+
+        # Send LE Set Advertise Enable (0x01 = enable)
+        adv_enable_cmd = [
+            "hcitool", "-i", adapter, "cmd",
+            f"0x{HCI_OGF_LE:02x}",
+            f"0x{HCI_OCF_LE_SET_ADV_ENABLE:04x}",
+            "0x01",
+        ]
+
+        subprocess.run(adv_enable_cmd, check=True, capture_output=True)
+        logger.info("BLE advertising enabled on %s", adapter)
+
+        return {
+            "adapter": adapter,
+            "interval_min_ms": interval_min_ms,
+            "interval_max_ms": interval_max_ms,
+            "interval_min_units": interval_min,
+            "interval_max_units": interval_max,
+            "adv_type": adv_type,
+            "own_addr_type": own_addr_type,
+            "enabled": True,
+        }
+
+    def stop_rapid_advertising(self, adapter: Optional[str] = None) -> None:
+        """
+        Stop BLE advertising on the adapter.
+
+        Sends LE Set Advertise Enable with enable=0x00 to disable advertising.
+
+        Args:
+            adapter: Adapter name override (default: instance adapter).
+
+        Raises:
+            subprocess.CalledProcessError: If hcitool command fails.
+        """
+        adapter = adapter or self._adapter_name
+
+        adv_disable_cmd = [
+            "hcitool", "-i", adapter, "cmd",
+            f"0x{HCI_OGF_LE:02x}",
+            f"0x{HCI_OCF_LE_SET_ADV_ENABLE:04x}",
+            "0x00",
+        ]
+
+        subprocess.run(adv_disable_cmd, check=True, capture_output=True)
+        logger.info("BLE advertising disabled on %s", adapter)
 
     # ── Adapter Info ───────────────────────────────────────────────────
 
