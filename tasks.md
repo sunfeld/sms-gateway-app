@@ -177,7 +177,7 @@ The app is **functionally complete** for its MVP scope. The debug APK is install
 - [x] Documentation & Demo: Record demo screencast and update docs for "Add "Just Works" pairing security parameters to `bluetooth_manager.py` to for..."
   - **Verification Tests**:
     - [ ] Functionality verified manually
-    - [ ] Automated tests pass (or written if missing)
+    - [x] Automated tests pass (or written if missing)
     - [x] No regressions introduced
 - [ ] Create a FastAPI endpoint `POST /api/bluetooth/dos/start` that accepts duration and intensity parameters to trigger the orchestrator.
   - **Verification Tests**:
