@@ -179,7 +179,7 @@ The app is **functionally complete** for its MVP scope. The debug APK is install
     - [x] Functionality verified manually
     - [x] Automated tests pass (or written if missing)
     - [x] No regressions introduced
-- [ ] Create a FastAPI endpoint `POST /api/bluetooth/dos/start` that accepts duration and intensity parameters to trigger the orchestrator.
+- [x] Create a FastAPI endpoint `POST /api/bluetooth/dos/start` that accepts duration and intensity parameters to trigger the orchestrator.
   - **Verification Tests**:
     - [x] Functionality verified manually
     - [x] Automated tests pass (or written if missing)
