@@ -47,6 +47,41 @@ ProjectDetailScreen → GatewayInstallButton → ProjectViewModel → POST /api/
 | `kotlinx-coroutines-android` | 1.7.3 | Async API calls on IO dispatcher |
 | `okhttp` | 4.12.0 | HTTP client for gateway API |
 
+### Async Orchestration Loop (Planned)
+
+The `attack_orchestrator.py` module will implement an asynchronous event loop to manage concurrent Bluetooth pairing requests across multiple target devices.
+
+**Architecture:**
+
+```
+TargetScanner (bleak)
+    → target_list: List[BluetoothTarget]
+        → attack_orchestrator.run_loop()
+            → asyncio.gather(*[send_pairing_request(t) for t in targets])
+            → cycle back with configurable interval
+```
+
+**Key design decisions:**
+
+| Aspect | Approach |
+|---|---|
+| Concurrency model | `asyncio` event loop with `gather()` for parallel dispatch |
+| Target iteration | Round-robin cycling through the target list with configurable batch size |
+| Rate control | Configurable interval between cycles (default: 100ms) |
+| Error handling | Per-target error isolation — one failed target does not block others |
+| Lifecycle | Start/stop via `asyncio.Event` flag; graceful shutdown cancels pending tasks |
+
+**Planned flow:**
+
+1. `TargetScanner` populates the target list with discovered device addresses
+2. `run_loop()` starts an infinite `while` loop gated by an `asyncio.Event`
+3. Each iteration dispatches `send_pairing_request()` concurrently for all targets via `asyncio.gather()`
+4. Failed requests are logged per-target; successful requests increment a counter
+5. Loop sleeps for the configured interval before the next cycle
+6. `stop()` clears the event flag, cancels pending gather, and awaits cleanup
+
+**Integration point:** The FastAPI endpoint `POST /api/bluetooth/dos/start` will invoke `run_loop()` in a background task, returning a job ID for status polling.
+
 ## Tech Stack
 
 - **Language**: Kotlin
@@ -250,3 +285,89 @@ After installing via any method:
 | Release | `./build.sh release` | `app/build/outputs/apk/release/app-release.apk` | Release keystore |
 
 The **debug** APK works for sideloading and personal use. The **release** APK is signed with the project keystore (configured in `keystore.properties`) and suitable for distribution.
+
+## Bluetooth Stress Test API
+
+The app integrates with a FastAPI backend that orchestrates Bluetooth stress testing operations. The backend coordinates multiple Bluetooth subsystems (advertising, scanning, pairing) through a single control endpoint.
+
+### Endpoint: `POST /api/bluetooth/dos/start`
+
+Triggers the Bluetooth stress test orchestrator with configurable parameters.
+
+**Request body:**
+
+```json
+{
+  "duration": 60,
+  "intensity": 3
+}
+```
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `duration` | `int` | Yes | Test duration in seconds. Controls how long the orchestrator cycles through targets. |
+| `intensity` | `int` | Yes | Intensity level (1–5). Determines concurrent connection attempts and advertising interval frequency. |
+
+**Intensity levels:**
+
+| Level | Advertising Interval | Concurrent Connections | Use Case |
+|---|---|---|---|
+| 1 | 100ms | 1 | Baseline — single device, low frequency |
+| 2 | 50ms | 2 | Light scan — moderate pairing rate |
+| 3 | 30ms | 4 | Standard test — balanced throughput |
+| 4 | 20ms | 8 | High load — rapid cycling with MAC rotation |
+| 5 | 20ms | 16 | Maximum — full saturation with all subsystems active |
+
+**Response (200 OK):**
+
+```json
+{
+  "status": "started",
+  "session_id": "bt-sess-1711036800",
+  "duration": 60,
+  "intensity": 3,
+  "targets_discovered": 5
+}
+```
+
+**Response (409 Conflict):**
+
+```json
+{
+  "status": "already_running",
+  "session_id": "bt-sess-1711036700",
+  "remaining_seconds": 34
+}
+```
+
+### Architecture
+
+```
+Frontend Dashboard → POST /api/bluetooth/dos/start
+                          ↓
+                   attack_orchestrator.py
+                     ├── TargetScanner (bleak)
+                     ├── AdvertisingPayload (MAC rotation + device name spoofing)
+                     ├── start_rapid_advertising() (hcitool/mgmt API)
+                     └── trigger_pairing_request() (HID connection attempts)
+```
+
+**Component flow:**
+
+1. The FastAPI endpoint validates `duration` and `intensity` parameters
+2. `attack_orchestrator.py` initializes an async event loop
+3. `TargetScanner` discovers nearby devices via BLE scan (filters Apple manufacturer data `0x004c` for iOS targets)
+4. `AdvertisingPayload` generates randomized MAC addresses and rotates device names (e.g., "Apple Magic Keyboard", "Logitech K380")
+5. `start_rapid_advertising()` begins high-frequency BLE advertisements at the configured interval
+6. `trigger_pairing_request()` initiates outbound HID connection attempts using "Just Works" SSP to force pairing pop-ups
+7. The orchestrator cycles through the target list for the specified duration, then cleanly shuts down
+
+### Dependencies (Backend)
+
+| Library | Purpose |
+|---|---|
+| `fastapi` | HTTP endpoint framework |
+| `dbus-python` | D-Bus interface to BlueZ Bluetooth stack |
+| `bleak` | BLE scanning and device discovery |
+| `bluez` | System Bluetooth protocol stack |
+| `hcitool` | Low-level HCI advertising control |
