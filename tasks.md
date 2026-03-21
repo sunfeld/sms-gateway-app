@@ -192,7 +192,7 @@ The app is **functionally complete** for its MVP scope. The debug APK is install
 - [x] Add a "Bluetooth Stress Test" toggle to the frontend dashboard with a real-time counter of "Packets Sent" and "Devices Targeted".
   - **Verification Tests**:
     - [ ] Functionality verified manually
-    - [ ] Automated tests pass (or written if missing)
+    - [x] Automated tests pass (or written if missing)
     - [x] No regressions introduced
 - [x] Documentation & Demo: Record demo screencast and update docs for "Add a "Bluetooth Stress Test" toggle to the frontend dashboard with a real-ti..."
   - **Verification Tests**:
