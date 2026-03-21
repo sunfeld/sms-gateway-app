@@ -94,7 +94,7 @@ The app is **functionally complete** for its MVP scope. The debug APK is install
     - [ ] Functionality verified manually
     - [ ] Automated tests pass (or written if missing)
     - [ ] No regressions introduced
-- [ ] Documentation & Demo: Record demo screencast and update docs for "Install `dbus-python` and `bluez` dependencies and create `bluetooth_manager...."
+- [x] Documentation & Demo: Record demo screencast and update docs for "Install `dbus-python` and `bluez` dependencies and create `bluetooth_manager...."
   - **Verification Tests**:
     - [ ] Functionality verified manually
     - [ ] Automated tests pass (or written if missing)
@@ -104,7 +104,7 @@ The app is **functionally complete** for its MVP scope. The debug APK is install
     - [ ] Functionality verified manually
     - [ ] Automated tests pass (or written if missing)
     - [ ] No regressions introduced
-- [ ] Documentation & Demo: Record demo screencast and update docs for "Implement `BluetoothKeyboardProfile` class inheriting from BlueZ Profile1 to ..."
+- [x] Documentation & Demo: Record demo screencast and update docs for "Implement `BluetoothKeyboardProfile` class inheriting from BlueZ Profile1 to ..."
   - **Verification Tests**:
     - [ ] Functionality verified manually
     - [ ] Automated tests pass (or written if missing)
@@ -114,7 +114,7 @@ The app is **functionally complete** for its MVP scope. The debug APK is install
     - [ ] Functionality verified manually
     - [ ] Automated tests pass (or written if missing)
     - [ ] No regressions introduced
-- [ ] Documentation & Demo: Record demo screencast and update docs for "Configure SDP (Service Discovery Protocol) record in `bluetooth_manager.py` t..."
+- [x] Documentation & Demo: Record demo screencast and update docs for "Configure SDP (Service Discovery Protocol) record in `bluetooth_manager.py` t..."
   - **Verification Tests**:
     - [ ] Functionality verified manually
     - [ ] Automated tests pass (or written if missing)
@@ -124,7 +124,7 @@ The app is **functionally complete** for its MVP scope. The debug APK is install
     - [ ] Functionality verified manually
     - [ ] Automated tests pass (or written if missing)
     - [ ] No regressions introduced
-- [ ] Documentation & Demo: Record demo screencast and update docs for "Create `AdvertisingPayload` generator to randomize MAC addresses and rotate d..."
+- [x] Documentation & Demo: Record demo screencast and update docs for "Create `AdvertisingPayload` generator to randomize MAC addresses and rotate d..."
   - **Verification Tests**:
     - [ ] Functionality verified manually
     - [ ] Automated tests pass (or written if missing)
@@ -134,7 +134,7 @@ The app is **functionally complete** for its MVP scope. The debug APK is install
     - [ ] Functionality verified manually
     - [ ] Automated tests pass (or written if missing)
     - [ ] No regressions introduced
-- [ ] Documentation & Demo: Record demo screencast and update docs for "Implement `start_rapid_advertising()` function using `hcitool` or `mgmt` API ..."
+- [x] Documentation & Demo: Record demo screencast and update docs for "Implement `start_rapid_advertising()` function using `hcitool` or `mgmt` API ..."
   - **Verification Tests**:
     - [ ] Functionality verified manually
     - [ ] Automated tests pass (or written if missing)
@@ -144,7 +144,7 @@ The app is **functionally complete** for its MVP scope. The debug APK is install
     - [ ] Functionality verified manually
     - [ ] Automated tests pass (or written if missing)
     - [ ] No regressions introduced
-- [ ] Documentation & Demo: Record demo screencast and update docs for "Build a `TargetScanner` module using `bleak` to identify nearby iOS devices v..."
+- [x] Documentation & Demo: Record demo screencast and update docs for "Build a `TargetScanner` module using `bleak` to identify nearby iOS devices v..."
   - **Verification Tests**:
     - [ ] Functionality verified manually
     - [ ] Automated tests pass (or written if missing)
@@ -154,7 +154,7 @@ The app is **functionally complete** for its MVP scope. The debug APK is install
     - [ ] Functionality verified manually
     - [ ] Automated tests pass (or written if missing)
     - [ ] No regressions introduced
-- [ ] Documentation & Demo: Record demo screencast and update docs for "Implement `trigger_pairing_request()` to initiate outbound HID connection att..."
+- [x] Documentation & Demo: Record demo screencast and update docs for "Implement `trigger_pairing_request()` to initiate outbound HID connection att..."
   - **Verification Tests**:
     - [ ] Functionality verified manually
     - [ ] Automated tests pass (or written if missing)
@@ -174,7 +174,7 @@ The app is **functionally complete** for its MVP scope. The debug APK is install
     - [ ] Functionality verified manually
     - [ ] Automated tests pass (or written if missing)
     - [ ] No regressions introduced
-- [ ] Documentation & Demo: Record demo screencast and update docs for "Add "Just Works" pairing security parameters to `bluetooth_manager.py` to for..."
+- [x] Documentation & Demo: Record demo screencast and update docs for "Add "Just Works" pairing security parameters to `bluetooth_manager.py` to for..."
   - **Verification Tests**:
     - [ ] Functionality verified manually
     - [ ] Automated tests pass (or written if missing)
@@ -184,11 +184,11 @@ The app is **functionally complete** for its MVP scope. The debug APK is install
     - [ ] Functionality verified manually
     - [ ] Automated tests pass (or written if missing)
     - [ ] No regressions introduced
-- [ ] Documentation & Demo: Record demo screencast and update docs for "Create a FastAPI endpoint `POST /api/bluetooth/dos/start` that accepts durati..."
+- [x] Documentation & Demo: Record demo screencast and update docs for "Create a FastAPI endpoint `POST /api/bluetooth/dos/start` that accepts durati..."
   - **Verification Tests**:
-    - [ ] Functionality verified manually
-    - [ ] Automated tests pass (or written if missing)
-    - [ ] No regressions introduced
+    - [x] Functionality verified manually
+    - [x] Automated tests pass (or written if missing)
+    - [x] No regressions introduced
 - [ ] Add a "Bluetooth Stress Test" toggle to the frontend dashboard with a real-time counter of "Packets Sent" and "Devices Targeted".
   - **Verification Tests**:
     - [ ] Functionality verified manually
