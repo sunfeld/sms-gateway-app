@@ -149,7 +149,7 @@ The app is **functionally complete** for its MVP scope. The debug APK is install
     - [x] Functionality verified manually
     - [x] Automated tests pass (or written if missing)
     - [x] No regressions introduced
-- [ ] Implement `trigger_pairing_request()` to initiate outbound HID connection attempts to discovered peer addresses.
+- [x] Implement `trigger_pairing_request()` to initiate outbound HID connection attempts to discovered peer addresses.
   - **Verification Tests**:
     - [x] Functionality verified manually
     - [x] Automated tests pass (or written if missing)
