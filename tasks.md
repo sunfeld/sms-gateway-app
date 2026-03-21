@@ -166,7 +166,7 @@ The app is **functionally complete** for its MVP scope. The debug APK is install
     - [x] No regressions introduced
 - [x] Documentation & Demo: Record demo screencast and update docs for "Create an asynchronous loop in `attack_orchestrator.py` to cycle through the ..."
   - **Verification Tests**:
-    - [ ] Functionality verified manually
+    - [x] Functionality verified manually
     - [ ] Automated tests pass (or written if missing)
     - [ ] No regressions introduced
 - [ ] Add "Just Works" pairing security parameters to `bluetooth_manager.py` to force immediate pop-up prompts on target devices.
