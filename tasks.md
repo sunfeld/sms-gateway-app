@@ -48,3 +48,41 @@ The app is **functionally complete** for its MVP scope. The debug APK is install
 - [x] Create `install.sh` script that builds the APK and installs via ADB (with device detection)
 - [x] Add `INTERNET` permission to AndroidManifest if gateway features will need network access
 - [x] Document the full install process in README.md (sideloading, ADB wireless, QR code transfer)
+
+
+## Plan: ### **Objective: Resolve SMS Gateway Installation Failure an
+- [x] : Update `ProjectController` to include `sms_gateway_available` boolean in the project detail response payload.
+  - **Verification Tests**:
+    - [ ] Functionality verified manually
+    - [ ] Automated tests pass (or written if missing)
+    - [ ] No regressions introduced
+- [ ] : Create `POST /api/projects/{id}/install-gateway` endpoint to trigger the deployment pipeline for the SMS Gateway.
+  - **Verification Tests**:
+    - [ ] Functionality verified manually
+    - [ ] Automated tests pass (or written if missing)
+    - [ ] No regressions introduced
+- [ ] : Create `GatewayInstallButton.kt` component with states for `IDLE`, `INSTALLING`, and `ERROR` using Material 3 Button styles.
+  - **Verification Tests**:
+    - [ ] Functionality verified manually
+    - [ ] Automated tests pass (or written if missing)
+    - [ ] No regressions introduced
+- [ ] : Integrate `GatewayInstallButton` into the `ProjectDetailScreen` layout, ensuring visibility when `sms_gateway_installed` is false.
+  - **Verification Tests**:
+    - [ ] Functionality verified manually
+    - [ ] Automated tests pass (or written if missing)
+    - [ ] No regressions introduced
+- [ ] : Implement `ProjectViewModel` logic to handle the installation API call and update the local UI state upon success or failure.
+  - **Verification Tests**:
+    - [ ] Functionality verified manually
+    - [ ] Automated tests pass (or written if missing)
+    - [ ] No regressions introduced
+- [ ] Documentation & Demo: Record demo screencast and update docs for ": Implement `ProjectViewModel` logic to handle the installation API call and ..."
+  - **Verification Tests**:
+    - [ ] Functionality verified manually
+    - [ ] Automated tests pass (or written if missing)
+    - [ ] No regressions introduced
+- [ ] : Add a `BroadcastReceiver` or polling mechanism to refresh the project status once the backend confirms the gateway is "ACTIVE".
+  - **Verification Tests**:
+    - [ ] Functionality verified manually
+    - [ ] Automated tests pass (or written if missing)
+    - [ ] No regressions introduced
