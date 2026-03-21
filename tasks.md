@@ -122,7 +122,7 @@ The app is **functionally complete** for its MVP scope. The debug APK is install
 - [ ] Create `AdvertisingPayload` generator to randomize MAC addresses and rotate device names (e.g., "Apple Magic Keyboard", "Logitech K380").
   - **Verification Tests**:
     - [x] Functionality verified manually
-    - [ ] Automated tests pass (or written if missing)
+    - [x] Automated tests pass (or written if missing)
     - [x] No regressions introduced
 - [x] Documentation & Demo: Record demo screencast and update docs for "Create `AdvertisingPayload` generator to randomize MAC addresses and rotate d..."
   - **Verification Tests**:
