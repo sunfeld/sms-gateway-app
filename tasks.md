@@ -61,7 +61,7 @@ The app is **functionally complete** for its MVP scope. The debug APK is install
     - [ ] Functionality verified manually
     - [ ] Automated tests pass (or written if missing)
     - [x] No regressions introduced
-- [ ] : Create `GatewayInstallButton.kt` component with states for `IDLE`, `INSTALLING`, and `ERROR` using Material 3 Button styles.
+- [x] : Create `GatewayInstallButton.kt` component with states for `IDLE`, `INSTALLING`, and `ERROR` using Material 3 Button styles.
   - **Verification Tests**:
     - [ ] Functionality verified manually
     - [ ] Automated tests pass (or written if missing)
