@@ -112,7 +112,7 @@ The app is **functionally complete** for its MVP scope. The debug APK is install
 - [ ] Configure SDP (Service Discovery Protocol) record in `bluetooth_manager.py` to broadcast device class as a Peripheral/Keyboard (0x000540).
   - **Verification Tests**:
     - [x] Functionality verified manually
-    - [ ] Automated tests pass (or written if missing)
+    - [x] Automated tests pass (or written if missing)
     - [x] No regressions introduced
 - [x] Documentation & Demo: Record demo screencast and update docs for "Configure SDP (Service Discovery Protocol) record in `bluetooth_manager.py` t..."
   - **Verification Tests**:
