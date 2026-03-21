@@ -34,6 +34,7 @@ def make_dbus_exception(name="org.freedesktop.DBus.Error.Failed", message="Mock 
     """Create a mock DBusException with a get_dbus_name method."""
     exc = dbus.exceptions.DBusException(message)
     exc._dbus_error_name = name
+    exc.get_dbus_name = lambda: name
     return exc
 
 
@@ -89,7 +90,7 @@ class TestGetDeviceInterface(unittest.TestCase):
         mock_obj = MagicMock()
         self.mgr._bus.get_object.return_value = mock_obj
 
-        with patch("dbus.Interface") as mock_iface:
+        with patch("bluetooth_manager.dbus.Interface") as mock_iface:
             mock_iface.return_value = MagicMock()
             result = self.mgr.get_device_interface("AA:BB:CC:DD:EE:FF")
 
@@ -116,7 +117,7 @@ class TestGetDevicePropertiesInterface(unittest.TestCase):
         mock_obj = MagicMock()
         self.mgr._bus.get_object.return_value = mock_obj
 
-        with patch("dbus.Interface") as mock_iface:
+        with patch("bluetooth_manager.dbus.Interface") as mock_iface:
             self.mgr.get_device_properties_interface("AA:BB:CC:DD:EE:FF")
             mock_iface.assert_called_with(mock_obj, DBUS_PROPERTIES_IFACE)
 

@@ -24,6 +24,9 @@ BLUEZ_AGENT_MANAGER_IFACE = "org.bluez.AgentManager1"
 DBUS_PROPERTIES_IFACE = "org.freedesktop.DBus.Properties"
 DBUS_OBJECT_MANAGER_IFACE = "org.freedesktop.DBus.ObjectManager"
 
+# HID Keyboard Service UUID (Bluetooth SIG assigned)
+HID_KEYBOARD_UUID = "00001124-0000-1000-8000-00805f9b34fb"
+
 # BLE Advertising interval unit: 0.625ms
 # HCI LE command group (OGF 0x08)
 HCI_OGF_LE = 0x08
@@ -654,6 +657,204 @@ class BluetoothManager:
             profile_path,
             DEVICE_CLASS_PERIPHERAL_KEYBOARD,
         )
+
+    # ── Device Interface Helpers ─────────────────────────────────────
+
+    def _address_to_device_path(self, address: str) -> str:
+        """
+        Convert a Bluetooth MAC address to a BlueZ D-Bus device object path.
+
+        Args:
+            address: Bluetooth address in XX:XX:XX:XX:XX:XX format.
+
+        Returns:
+            D-Bus object path (e.g., /org/bluez/hci0/dev_AA_BB_CC_DD_EE_FF).
+        """
+        addr_underscored = address.replace(":", "_").upper()
+        return f"{self._adapter_path}/dev_{addr_underscored}"
+
+    def get_device_interface(self, address: str) -> dbus.Interface:
+        """
+        Get the org.bluez.Device1 D-Bus interface for a device by address.
+
+        Args:
+            address: Bluetooth address in XX:XX:XX:XX:XX:XX format.
+
+        Returns:
+            D-Bus Interface for org.bluez.Device1.
+
+        Raises:
+            dbus.exceptions.DBusException: If the device is not known to BlueZ.
+        """
+        path = self._address_to_device_path(address)
+        obj = self._bus.get_object(BLUEZ_SERVICE, path)
+        return dbus.Interface(obj, BLUEZ_DEVICE_IFACE)
+
+    def get_device_properties_interface(self, address: str) -> dbus.Interface:
+        """
+        Get the D-Bus Properties interface for a device by address.
+
+        Args:
+            address: Bluetooth address in XX:XX:XX:XX:XX:XX format.
+
+        Returns:
+            D-Bus Interface for org.freedesktop.DBus.Properties.
+        """
+        path = self._address_to_device_path(address)
+        obj = self._bus.get_object(BLUEZ_SERVICE, path)
+        return dbus.Interface(obj, DBUS_PROPERTIES_IFACE)
+
+    def set_device_trusted(self, address: str, trusted: bool = True) -> None:
+        """
+        Set the Trusted property on a Bluetooth device.
+
+        Trusted devices bypass interactive authorization prompts on our side,
+        allowing pairing to proceed without local confirmation.
+
+        Args:
+            address: Bluetooth address in XX:XX:XX:XX:XX:XX format.
+            trusted: Whether to trust (True) or untrust (False) the device.
+        """
+        props = self.get_device_properties_interface(address)
+        props.Set(BLUEZ_DEVICE_IFACE, "Trusted", dbus.Boolean(trusted))
+        logger.info("Device %s trusted: %s", address, trusted)
+
+    # ── Pairing / Connection ──────────────────────────────────────────
+
+    def trigger_pairing_request(
+        self,
+        address: str,
+        set_trusted: bool = True,
+    ) -> dict:
+        """
+        Initiate an outbound HID pairing request to a discovered peer address.
+
+        Sends a Bluetooth pairing request to the target device, which triggers
+        a pairing prompt/pop-up on the target. The adapter should be configured
+        as a HID keyboard (via configure_keyboard_sdp) before calling this.
+
+        Steps performed:
+        1. Get the Device1 D-Bus interface for the target address.
+        2. Mark the device as trusted (bypasses our local auth dialog).
+        3. Call Pair() to initiate the pairing handshake.
+        4. On successful pairing, attempt ConnectProfile() with HID UUID.
+
+        Args:
+            address: Target device Bluetooth address (XX:XX:XX:XX:XX:XX).
+            set_trusted: Whether to mark the device as trusted before pairing.
+
+        Returns:
+            Dict with keys: address, device_path, status, paired, connected, error.
+            Status is one of: "connected", "paired", "failed".
+        """
+        device_path = self._address_to_device_path(address)
+        result = {
+            "address": address,
+            "device_path": device_path,
+            "status": "failed",
+            "paired": False,
+            "connected": False,
+            "error": None,
+        }
+
+        try:
+            device = self.get_device_interface(address)
+        except dbus.exceptions.DBusException as e:
+            result["error"] = f"Device not found: {e}"
+            logger.warning("Device %s not found in BlueZ object tree: %s", address, e)
+            return result
+
+        # Mark device as trusted to bypass local auth prompts
+        if set_trusted:
+            try:
+                self.set_device_trusted(address, True)
+            except dbus.exceptions.DBusException as e:
+                logger.warning("Could not set trusted for %s: %s", address, e)
+
+        # Initiate pairing — this sends the pairing request to the target
+        try:
+            logger.info("Sending pairing request to %s", address)
+            device.Pair()
+            result["paired"] = True
+            result["status"] = "paired"
+            logger.info("Pairing accepted by %s", address)
+        except dbus.exceptions.DBusException as e:
+            error_name = e.get_dbus_name() if hasattr(e, "get_dbus_name") else type(e).__name__
+            error_msg = str(e)
+            # AlreadyExists means already paired — treat as success
+            if "AlreadyExists" in str(error_name):
+                result["paired"] = True
+                result["status"] = "paired"
+                logger.info("Device %s already paired", address)
+            else:
+                result["error"] = f"{error_name}: {error_msg}"
+                logger.warning("Pairing request to %s failed: %s", address, error_msg)
+                return result
+
+        # Attempt HID profile connection after successful pairing
+        try:
+            device.ConnectProfile(HID_KEYBOARD_UUID)
+            result["connected"] = True
+            result["status"] = "connected"
+            logger.info("HID profile connected to %s", address)
+        except dbus.exceptions.DBusException as e:
+            logger.warning(
+                "HID profile connection to %s failed (pairing still succeeded): %s",
+                address,
+                e,
+            )
+
+        return result
+
+    def trigger_pairing_requests(
+        self,
+        addresses: list[str],
+        set_trusted: bool = True,
+    ) -> list[dict]:
+        """
+        Send pairing requests to multiple discovered peer addresses.
+
+        Iterates through each address and calls trigger_pairing_request().
+        Errors on one address do not prevent attempts to remaining addresses.
+
+        Args:
+            addresses: List of target Bluetooth addresses (XX:XX:XX:XX:XX:XX).
+            set_trusted: Whether to mark devices as trusted before pairing.
+
+        Returns:
+            List of result dicts from trigger_pairing_request(), one per address.
+        """
+        results = []
+        for addr in addresses:
+            result = self.trigger_pairing_request(addr, set_trusted=set_trusted)
+            results.append(result)
+            logger.info(
+                "Pairing attempt %d/%d: %s → %s",
+                len(results),
+                len(addresses),
+                addr,
+                result["status"],
+            )
+        return results
+
+    def cancel_pairing(self, address: str) -> bool:
+        """
+        Cancel an in-progress pairing attempt with a device.
+
+        Args:
+            address: Bluetooth address of the device.
+
+        Returns:
+            True if cancellation succeeded, False otherwise.
+        """
+        try:
+            device = self.get_device_interface(address)
+            device.CancelPairing()
+            logger.info("Pairing cancelled for %s", address)
+            return True
+        except dbus.exceptions.DBusException as e:
+            logger.warning("Failed to cancel pairing for %s: %s", address, e)
+            return False
 
     @staticmethod
     def get_keyboard_device_class() -> int:

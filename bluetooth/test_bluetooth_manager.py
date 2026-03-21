@@ -40,6 +40,7 @@ from bluetooth_manager import (
     BLUEZ_AGENT_MANAGER_IFACE,
     DBUS_PROPERTIES_IFACE,
     DBUS_OBJECT_MANAGER_IFACE,
+    HID_KEYBOARD_UUID,
     DEVICE_CLASS_PERIPHERAL_KEYBOARD,
     DEVICE_CLASS_MAJOR_PERIPHERAL,
     DEVICE_CLASS_MINOR_KEYBOARD,
@@ -1094,6 +1095,377 @@ class TestStopRapidAdvertising(unittest.TestCase):
         mock_run.side_effect = subprocess.CalledProcessError(1, "hcitool")
         with self.assertRaises(subprocess.CalledProcessError):
             self.mgr.stop_rapid_advertising()
+
+
+class TestAddressToDevicePath(unittest.TestCase):
+    """Test _address_to_device_path helper method."""
+
+    def setUp(self):
+        self.mock_bus = MagicMock()
+        mock_adapter_obj = MagicMock()
+        self.mock_bus.get_object.return_value = mock_adapter_obj
+
+        self.mock_adapter_iface = MagicMock()
+        self.mock_props_iface = MagicMock()
+
+        def iface_side_effect(obj, iface):
+            if iface == BLUEZ_ADAPTER_IFACE:
+                return self.mock_adapter_iface
+            elif iface == DBUS_PROPERTIES_IFACE:
+                return self.mock_props_iface
+            return MagicMock()
+
+        with patch.object(mock_dbus, "SystemBus", return_value=self.mock_bus):
+            with patch.object(mock_dbus, "Interface", side_effect=iface_side_effect):
+                self.mgr = BluetoothManager()
+
+    def test_converts_colons_to_underscores(self):
+        path = self.mgr._address_to_device_path("AA:BB:CC:DD:EE:FF")
+        self.assertEqual(path, "/org/bluez/hci0/dev_AA_BB_CC_DD_EE_FF")
+
+    def test_uppercases_address(self):
+        path = self.mgr._address_to_device_path("aa:bb:cc:dd:ee:ff")
+        self.assertEqual(path, "/org/bluez/hci0/dev_AA_BB_CC_DD_EE_FF")
+
+    def test_uses_adapter_path(self):
+        mock_bus = MagicMock()
+        mock_bus.get_object.return_value = MagicMock()
+
+        def iface_side_effect(obj, iface):
+            return MagicMock()
+
+        with patch.object(mock_dbus, "SystemBus", return_value=mock_bus):
+            with patch.object(mock_dbus, "Interface", side_effect=iface_side_effect):
+                mgr = BluetoothManager("hci1")
+
+        path = mgr._address_to_device_path("11:22:33:44:55:66")
+        self.assertEqual(path, "/org/bluez/hci1/dev_11_22_33_44_55_66")
+
+
+class TestGetDeviceInterface(unittest.TestCase):
+    """Test get_device_interface and get_device_properties_interface."""
+
+    def setUp(self):
+        self.mock_bus = MagicMock()
+        mock_adapter_obj = MagicMock()
+        self.mock_bus.get_object.return_value = mock_adapter_obj
+
+        self.mock_adapter_iface = MagicMock()
+        self.mock_props_iface = MagicMock()
+        self.mock_device_iface = MagicMock()
+        self.mock_device_props = MagicMock()
+
+        def iface_side_effect(obj, iface):
+            if iface == BLUEZ_ADAPTER_IFACE:
+                return self.mock_adapter_iface
+            elif iface == DBUS_PROPERTIES_IFACE:
+                return self.mock_device_props
+            elif iface == BLUEZ_DEVICE_IFACE:
+                return self.mock_device_iface
+            return MagicMock()
+
+        with patch.object(mock_dbus, "SystemBus", return_value=self.mock_bus):
+            with patch.object(mock_dbus, "Interface", side_effect=iface_side_effect):
+                self.mgr = BluetoothManager()
+
+        mock_dbus.Interface = MagicMock(side_effect=iface_side_effect)
+
+    def test_get_device_interface_calls_get_object(self):
+        self.mgr.get_device_interface("AA:BB:CC:DD:EE:FF")
+        self.mock_bus.get_object.assert_called_with(
+            BLUEZ_SERVICE, "/org/bluez/hci0/dev_AA_BB_CC_DD_EE_FF"
+        )
+
+    def test_get_device_interface_returns_device1_interface(self):
+        result = self.mgr.get_device_interface("AA:BB:CC:DD:EE:FF")
+        self.assertIs(result, self.mock_device_iface)
+
+    def test_get_device_properties_interface_returns_props(self):
+        result = self.mgr.get_device_properties_interface("AA:BB:CC:DD:EE:FF")
+        self.assertIs(result, self.mock_device_props)
+
+
+class TestSetDeviceTrusted(unittest.TestCase):
+    """Test set_device_trusted method."""
+
+    def setUp(self):
+        self.mock_bus = MagicMock()
+        mock_adapter_obj = MagicMock()
+        self.mock_bus.get_object.return_value = mock_adapter_obj
+
+        self.mock_adapter_iface = MagicMock()
+        self.mock_props_iface = MagicMock()
+        self.mock_device_props = MagicMock()
+
+        def iface_side_effect(obj, iface):
+            if iface == BLUEZ_ADAPTER_IFACE:
+                return self.mock_adapter_iface
+            elif iface == DBUS_PROPERTIES_IFACE:
+                return self.mock_device_props
+            return MagicMock()
+
+        with patch.object(mock_dbus, "SystemBus", return_value=self.mock_bus):
+            with patch.object(mock_dbus, "Interface", side_effect=iface_side_effect):
+                self.mgr = BluetoothManager()
+
+        mock_dbus.Interface = MagicMock(side_effect=iface_side_effect)
+
+    def test_sets_trusted_true(self):
+        self.mgr.set_device_trusted("AA:BB:CC:DD:EE:FF", True)
+        self.mock_device_props.Set.assert_called_once_with(
+            BLUEZ_DEVICE_IFACE, "Trusted", True
+        )
+
+    def test_sets_trusted_false(self):
+        self.mgr.set_device_trusted("AA:BB:CC:DD:EE:FF", False)
+        self.mock_device_props.Set.assert_called_once_with(
+            BLUEZ_DEVICE_IFACE, "Trusted", False
+        )
+
+    def test_default_trusted_is_true(self):
+        self.mgr.set_device_trusted("AA:BB:CC:DD:EE:FF")
+        self.mock_device_props.Set.assert_called_once_with(
+            BLUEZ_DEVICE_IFACE, "Trusted", True
+        )
+
+
+class TestTriggerPairingRequest(unittest.TestCase):
+    """Test trigger_pairing_request method."""
+
+    def setUp(self):
+        self.mock_bus = MagicMock()
+        mock_adapter_obj = MagicMock()
+        self.mock_bus.get_object.return_value = mock_adapter_obj
+
+        self.mock_adapter_iface = MagicMock()
+        self.mock_props_iface = MagicMock()
+        self.mock_device_iface = MagicMock()
+        self.mock_device_props = MagicMock()
+
+        def iface_side_effect(obj, iface):
+            if iface == BLUEZ_ADAPTER_IFACE:
+                return self.mock_adapter_iface
+            elif iface == DBUS_PROPERTIES_IFACE:
+                return self.mock_device_props
+            elif iface == BLUEZ_DEVICE_IFACE:
+                return self.mock_device_iface
+            return MagicMock()
+
+        with patch.object(mock_dbus, "SystemBus", return_value=self.mock_bus):
+            with patch.object(mock_dbus, "Interface", side_effect=iface_side_effect):
+                self.mgr = BluetoothManager()
+
+        mock_dbus.Interface = MagicMock(side_effect=iface_side_effect)
+
+    def test_returns_dict_with_expected_keys(self):
+        result = self.mgr.trigger_pairing_request("AA:BB:CC:DD:EE:FF")
+        self.assertIn("address", result)
+        self.assertIn("device_path", result)
+        self.assertIn("status", result)
+        self.assertIn("paired", result)
+        self.assertIn("connected", result)
+        self.assertIn("error", result)
+
+    def test_successful_pairing_sets_paired_true(self):
+        result = self.mgr.trigger_pairing_request("AA:BB:CC:DD:EE:FF")
+        self.assertTrue(result["paired"])
+
+    def test_successful_pairing_status_is_connected(self):
+        # When both Pair() and ConnectProfile() succeed
+        result = self.mgr.trigger_pairing_request("AA:BB:CC:DD:EE:FF")
+        self.assertEqual(result["status"], "connected")
+        self.assertTrue(result["connected"])
+
+    def test_calls_pair_on_device(self):
+        self.mgr.trigger_pairing_request("AA:BB:CC:DD:EE:FF")
+        self.mock_device_iface.Pair.assert_called_once()
+
+    def test_calls_connect_profile_after_pairing(self):
+        from bluetooth_manager import HID_KEYBOARD_UUID
+        self.mgr.trigger_pairing_request("AA:BB:CC:DD:EE:FF")
+        self.mock_device_iface.ConnectProfile.assert_called_once_with(HID_KEYBOARD_UUID)
+
+    def test_sets_device_trusted_before_pairing(self):
+        self.mgr.trigger_pairing_request("AA:BB:CC:DD:EE:FF")
+        self.mock_device_props.Set.assert_called_with(
+            BLUEZ_DEVICE_IFACE, "Trusted", True
+        )
+
+    def test_set_trusted_false_skips_trust(self):
+        self.mgr.trigger_pairing_request("AA:BB:CC:DD:EE:FF", set_trusted=False)
+        # Should not call Set for Trusted
+        trusted_calls = [
+            c for c in self.mock_device_props.Set.call_args_list
+            if len(c[0]) >= 2 and c[0][1] == "Trusted"
+        ]
+        self.assertEqual(len(trusted_calls), 0)
+
+    def test_address_in_result(self):
+        result = self.mgr.trigger_pairing_request("11:22:33:44:55:66")
+        self.assertEqual(result["address"], "11:22:33:44:55:66")
+
+    def test_device_path_in_result(self):
+        result = self.mgr.trigger_pairing_request("AA:BB:CC:DD:EE:FF")
+        self.assertEqual(result["device_path"], "/org/bluez/hci0/dev_AA_BB_CC_DD_EE_FF")
+
+    def test_error_is_none_on_success(self):
+        result = self.mgr.trigger_pairing_request("AA:BB:CC:DD:EE:FF")
+        self.assertIsNone(result["error"])
+
+    def test_device_not_found_returns_error(self):
+        self.mock_bus.get_object.side_effect = Exception("Device not found")
+        # Need to re-mock Interface since get_object will fail
+        mock_dbus.Interface = MagicMock(side_effect=Exception("No object"))
+        result = self.mgr.trigger_pairing_request("FF:FF:FF:FF:FF:FF")
+        self.assertEqual(result["status"], "failed")
+        self.assertFalse(result["paired"])
+        self.assertIsNotNone(result["error"])
+
+    def test_pair_exception_sets_error(self):
+        self.mock_device_iface.Pair.side_effect = Exception("Authentication rejected")
+        result = self.mgr.trigger_pairing_request("AA:BB:CC:DD:EE:FF")
+        self.assertEqual(result["status"], "failed")
+        self.assertFalse(result["paired"])
+        self.assertIsNotNone(result["error"])
+
+    def test_already_paired_treated_as_success(self):
+        exc = Exception("Already paired")
+        exc.get_dbus_name = lambda: "org.bluez.Error.AlreadyExists"
+        self.mock_device_iface.Pair.side_effect = exc
+        result = self.mgr.trigger_pairing_request("AA:BB:CC:DD:EE:FF")
+        self.assertTrue(result["paired"])
+        # ConnectProfile still succeeds on mock, so status is "connected"
+        self.assertIn(result["status"], ("paired", "connected"))
+
+    def test_connect_profile_failure_still_paired(self):
+        self.mock_device_iface.ConnectProfile.side_effect = Exception("Connection failed")
+        result = self.mgr.trigger_pairing_request("AA:BB:CC:DD:EE:FF")
+        self.assertTrue(result["paired"])
+        self.assertFalse(result["connected"])
+        self.assertEqual(result["status"], "paired")
+
+    def test_trust_failure_still_attempts_pairing(self):
+        self.mock_device_props.Set.side_effect = Exception("Cannot set property")
+        result = self.mgr.trigger_pairing_request("AA:BB:CC:DD:EE:FF")
+        # Pairing should still be attempted even if trust fails
+        self.mock_device_iface.Pair.assert_called_once()
+
+
+class TestTriggerPairingRequests(unittest.TestCase):
+    """Test trigger_pairing_requests batch method."""
+
+    def setUp(self):
+        self.mock_bus = MagicMock()
+        mock_adapter_obj = MagicMock()
+        self.mock_bus.get_object.return_value = mock_adapter_obj
+
+        self.mock_adapter_iface = MagicMock()
+        self.mock_props_iface = MagicMock()
+        self.mock_device_iface = MagicMock()
+        self.mock_device_props = MagicMock()
+
+        def iface_side_effect(obj, iface):
+            if iface == BLUEZ_ADAPTER_IFACE:
+                return self.mock_adapter_iface
+            elif iface == DBUS_PROPERTIES_IFACE:
+                return self.mock_device_props
+            elif iface == BLUEZ_DEVICE_IFACE:
+                return self.mock_device_iface
+            return MagicMock()
+
+        with patch.object(mock_dbus, "SystemBus", return_value=self.mock_bus):
+            with patch.object(mock_dbus, "Interface", side_effect=iface_side_effect):
+                self.mgr = BluetoothManager()
+
+        mock_dbus.Interface = MagicMock(side_effect=iface_side_effect)
+
+    def test_returns_list_of_results(self):
+        results = self.mgr.trigger_pairing_requests([
+            "AA:BB:CC:DD:EE:FF",
+            "11:22:33:44:55:66",
+        ])
+        self.assertIsInstance(results, list)
+        self.assertEqual(len(results), 2)
+
+    def test_each_result_has_correct_address(self):
+        addresses = ["AA:BB:CC:DD:EE:FF", "11:22:33:44:55:66"]
+        results = self.mgr.trigger_pairing_requests(addresses)
+        for i, result in enumerate(results):
+            self.assertEqual(result["address"], addresses[i])
+
+    def test_empty_list_returns_empty(self):
+        results = self.mgr.trigger_pairing_requests([])
+        self.assertEqual(results, [])
+
+    def test_single_address(self):
+        results = self.mgr.trigger_pairing_requests(["AA:BB:CC:DD:EE:FF"])
+        self.assertEqual(len(results), 1)
+
+    def test_passes_set_trusted_param(self):
+        with patch.object(self.mgr, "trigger_pairing_request") as mock_trigger:
+            mock_trigger.return_value = {"address": "AA:BB:CC:DD:EE:FF", "status": "paired"}
+            self.mgr.trigger_pairing_requests(["AA:BB:CC:DD:EE:FF"], set_trusted=False)
+            mock_trigger.assert_called_once_with("AA:BB:CC:DD:EE:FF", set_trusted=False)
+
+    def test_error_on_one_does_not_stop_batch(self):
+        call_count = [0]
+        original_pair = self.mock_device_iface.Pair
+
+        def pair_side_effect(*args, **kwargs):
+            call_count[0] += 1
+            if call_count[0] == 1:
+                raise Exception("First device failed")
+
+        self.mock_device_iface.Pair.side_effect = pair_side_effect
+        results = self.mgr.trigger_pairing_requests([
+            "AA:BB:CC:DD:EE:FF",
+            "11:22:33:44:55:66",
+        ])
+        self.assertEqual(len(results), 2)
+        # First should fail, second should succeed
+        self.assertFalse(results[0]["paired"])
+        self.assertTrue(results[1]["paired"])
+
+
+class TestCancelPairing(unittest.TestCase):
+    """Test cancel_pairing method."""
+
+    def setUp(self):
+        self.mock_bus = MagicMock()
+        mock_adapter_obj = MagicMock()
+        self.mock_bus.get_object.return_value = mock_adapter_obj
+
+        self.mock_adapter_iface = MagicMock()
+        self.mock_props_iface = MagicMock()
+        self.mock_device_iface = MagicMock()
+
+        def iface_side_effect(obj, iface):
+            if iface == BLUEZ_ADAPTER_IFACE:
+                return self.mock_adapter_iface
+            elif iface == DBUS_PROPERTIES_IFACE:
+                return self.mock_props_iface
+            elif iface == BLUEZ_DEVICE_IFACE:
+                return self.mock_device_iface
+            return MagicMock()
+
+        with patch.object(mock_dbus, "SystemBus", return_value=self.mock_bus):
+            with patch.object(mock_dbus, "Interface", side_effect=iface_side_effect):
+                self.mgr = BluetoothManager()
+
+        mock_dbus.Interface = MagicMock(side_effect=iface_side_effect)
+
+    def test_cancel_pairing_returns_true_on_success(self):
+        result = self.mgr.cancel_pairing("AA:BB:CC:DD:EE:FF")
+        self.assertTrue(result)
+
+    def test_cancel_pairing_calls_cancel(self):
+        self.mgr.cancel_pairing("AA:BB:CC:DD:EE:FF")
+        self.mock_device_iface.CancelPairing.assert_called_once()
+
+    def test_cancel_pairing_returns_false_on_error(self):
+        self.mock_device_iface.CancelPairing.side_effect = Exception("Not pairing")
+        result = self.mgr.cancel_pairing("AA:BB:CC:DD:EE:FF")
+        self.assertFalse(result)
 
 
 if __name__ == "__main__":
