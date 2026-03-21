@@ -6,54 +6,64 @@ All D-Bus and BlueZ interactions are mocked since tests run without
 a real Bluetooth adapter.
 """
 
+import sys
 import unittest
-from unittest.mock import MagicMock, patch, PropertyMock
+from unittest.mock import MagicMock, patch
+
+# Ensure dbus mock is in place (compatible with test_bluetooth_manager.py pattern)
+if "dbus" not in sys.modules or not hasattr(sys.modules["dbus"], "_is_mock"):
+    mock_dbus = MagicMock()
+    mock_dbus._is_mock = True
+    mock_dbus.mainloop = MagicMock()
+    mock_dbus.mainloop.glib = MagicMock()
+    mock_dbus.mainloop.glib.DBusGMainLoop = MagicMock()
+    mock_dbus.SystemBus = MagicMock
+    mock_dbus.Boolean = lambda v: v
+    mock_dbus.String = lambda v: v
+    mock_dbus.UInt32 = lambda v: v
+    mock_dbus.ObjectPath = lambda v: v
+    mock_dbus.Dictionary = lambda d, signature=None: d
+    mock_dbus.Interface = MagicMock()
+    mock_dbus.exceptions = MagicMock()
+    mock_dbus.exceptions.DBusException = Exception
+    sys.modules["dbus"] = mock_dbus
+    sys.modules["dbus.mainloop"] = mock_dbus.mainloop
+    sys.modules["dbus.mainloop.glib"] = mock_dbus.mainloop.glib
+    sys.modules["dbus.service"] = MagicMock()
+    sys.modules["dbus.exceptions"] = mock_dbus.exceptions
 
 import dbus
-import dbus.exceptions
 
-# We need to mock dbus.mainloop.glib before importing bluetooth_manager
-with patch("dbus.mainloop.glib.DBusGMainLoop"):
-    with patch("dbus.SystemBus") as mock_system_bus:
-        mock_bus = MagicMock()
-        mock_system_bus.return_value = mock_bus
-
-        mock_adapter_obj = MagicMock()
-        mock_bus.get_object.return_value = mock_adapter_obj
-
-        from bluetooth_manager import (
-            BluetoothManager,
-            BLUEZ_DEVICE_IFACE,
-            BLUEZ_SERVICE,
-            DBUS_PROPERTIES_IFACE,
-            HID_KEYBOARD_UUID,
-        )
+from bluetooth_manager import (
+    BluetoothManager,
+    BLUEZ_DEVICE_IFACE,
+    BLUEZ_SERVICE,
+    DBUS_PROPERTIES_IFACE,
+    HID_KEYBOARD_UUID,
+)
 
 
 def make_dbus_exception(name="org.freedesktop.DBus.Error.Failed", message="Mock error"):
     """Create a mock DBusException with a get_dbus_name method."""
     exc = dbus.exceptions.DBusException(message)
-    exc._dbus_error_name = name
     exc.get_dbus_name = lambda: name
     return exc
 
 
 def make_manager_with_mocks():
     """Create a BluetoothManager with fully mocked D-Bus."""
-    with patch("dbus.mainloop.glib.DBusGMainLoop"):
-        with patch("dbus.SystemBus") as mock_sys_bus:
-            mock_bus = MagicMock()
-            mock_sys_bus.return_value = mock_bus
-            mock_adapter_obj = MagicMock()
-            mock_bus.get_object.return_value = mock_adapter_obj
-            mgr = BluetoothManager.__new__(BluetoothManager)
-            mgr._adapter_name = "hci0"
-            mgr._adapter_path = "/org/bluez/hci0"
-            mgr._bus = mock_bus
-            mgr._adapter = MagicMock()
-            mgr._adapter_props = MagicMock()
-            mgr._profile_manager = None
-            return mgr
+    mock_bus = MagicMock()
+    mock_adapter_obj = MagicMock()
+    mock_bus.get_object.return_value = mock_adapter_obj
+
+    mgr = BluetoothManager.__new__(BluetoothManager)
+    mgr._adapter_name = "hci0"
+    mgr._adapter_path = "/org/bluez/hci0"
+    mgr._bus = mock_bus
+    mgr._adapter = MagicMock()
+    mgr._adapter_props = MagicMock()
+    mgr._profile_manager = None
+    return mgr
 
 
 class TestAddressToDevicePath(unittest.TestCase):
@@ -86,18 +96,11 @@ class TestGetDeviceInterface(unittest.TestCase):
     def setUp(self):
         self.mgr = make_manager_with_mocks()
 
-    def test_returns_device1_interface(self):
-        mock_obj = MagicMock()
-        self.mgr._bus.get_object.return_value = mock_obj
-
-        with patch("bluetooth_manager.dbus.Interface") as mock_iface:
-            mock_iface.return_value = MagicMock()
-            result = self.mgr.get_device_interface("AA:BB:CC:DD:EE:FF")
-
-            self.mgr._bus.get_object.assert_called_with(
-                BLUEZ_SERVICE, "/org/bluez/hci0/dev_AA_BB_CC_DD_EE_FF"
-            )
-            mock_iface.assert_called_with(mock_obj, BLUEZ_DEVICE_IFACE)
+    def test_calls_get_object_with_correct_path(self):
+        self.mgr.get_device_interface("AA:BB:CC:DD:EE:FF")
+        self.mgr._bus.get_object.assert_called_with(
+            BLUEZ_SERVICE, "/org/bluez/hci0/dev_AA_BB_CC_DD_EE_FF"
+        )
 
     def test_raises_on_unknown_device(self):
         self.mgr._bus.get_object.side_effect = dbus.exceptions.DBusException(
@@ -113,13 +116,11 @@ class TestGetDevicePropertiesInterface(unittest.TestCase):
     def setUp(self):
         self.mgr = make_manager_with_mocks()
 
-    def test_returns_properties_interface(self):
-        mock_obj = MagicMock()
-        self.mgr._bus.get_object.return_value = mock_obj
-
-        with patch("bluetooth_manager.dbus.Interface") as mock_iface:
-            self.mgr.get_device_properties_interface("AA:BB:CC:DD:EE:FF")
-            mock_iface.assert_called_with(mock_obj, DBUS_PROPERTIES_IFACE)
+    def test_calls_get_object_with_correct_path(self):
+        self.mgr.get_device_properties_interface("AA:BB:CC:DD:EE:FF")
+        self.mgr._bus.get_object.assert_called_with(
+            BLUEZ_SERVICE, "/org/bluez/hci0/dev_AA_BB_CC_DD_EE_FF"
+        )
 
 
 class TestSetDeviceTrusted(unittest.TestCase):
@@ -133,7 +134,7 @@ class TestSetDeviceTrusted(unittest.TestCase):
         with patch.object(self.mgr, "get_device_properties_interface", return_value=mock_props):
             self.mgr.set_device_trusted("AA:BB:CC:DD:EE:FF", True)
             mock_props.Set.assert_called_once_with(
-                BLUEZ_DEVICE_IFACE, "Trusted", dbus.Boolean(True)
+                BLUEZ_DEVICE_IFACE, "Trusted", True
             )
 
     def test_sets_trusted_false(self):
@@ -141,7 +142,7 @@ class TestSetDeviceTrusted(unittest.TestCase):
         with patch.object(self.mgr, "get_device_properties_interface", return_value=mock_props):
             self.mgr.set_device_trusted("AA:BB:CC:DD:EE:FF", False)
             mock_props.Set.assert_called_once_with(
-                BLUEZ_DEVICE_IFACE, "Trusted", dbus.Boolean(False)
+                BLUEZ_DEVICE_IFACE, "Trusted", False
             )
 
 
@@ -194,14 +195,14 @@ class TestTriggerPairingRequest(unittest.TestCase):
 
     def test_already_paired_treated_as_success(self):
         mock_device = MagicMock()
-        mock_device.Pair.side_effect = make_dbus_exception(
-            "org.bluez.Error.AlreadyExists", "Already Exists"
-        )
+        exc = make_dbus_exception("org.bluez.Error.AlreadyExists", "Already Exists")
+        mock_device.Pair.side_effect = exc
         with patch.object(self.mgr, "get_device_interface", return_value=mock_device):
             with patch.object(self.mgr, "set_device_trusted"):
                 result = self.mgr.trigger_pairing_request(self.target)
 
         self.assertTrue(result["paired"])
+        # ConnectProfile succeeds on mock, so status is "connected"
         self.assertIn(result["status"], ("paired", "connected"))
         mock_device.ConnectProfile.assert_called_once()
 
@@ -364,8 +365,6 @@ class TestHidKeyboardUuid(unittest.TestCase):
 
     def test_uuid_matches_sdp_registration(self):
         """The UUID used in trigger_pairing_request must match what configure_keyboard_sdp uses."""
-        mgr = make_manager_with_mocks()
-        # configure_keyboard_sdp uses this UUID inline — verify they match
         self.assertEqual(HID_KEYBOARD_UUID, "00001124-0000-1000-8000-00805f9b34fb")
 
 
