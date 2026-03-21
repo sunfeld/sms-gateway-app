@@ -127,7 +127,7 @@ The app is **functionally complete** for its MVP scope. The debug APK is install
 - [x] Documentation & Demo: Record demo screencast and update docs for "Create `AdvertisingPayload` generator to randomize MAC addresses and rotate d..."
   - **Verification Tests**:
     - [x] Functionality verified manually
-    - [ ] Automated tests pass (or written if missing)
+    - [x] Automated tests pass (or written if missing)
     - [x] No regressions introduced
 - [ ] Implement `start_rapid_advertising()` function using `hcitool` or `mgmt` API to set high-frequency advertisement intervals (min/max 20ms).
   - **Verification Tests**:
