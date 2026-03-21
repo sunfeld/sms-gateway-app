@@ -23,6 +23,129 @@ BLUEZ_AGENT_MANAGER_IFACE = "org.bluez.AgentManager1"
 DBUS_PROPERTIES_IFACE = "org.freedesktop.DBus.Properties"
 DBUS_OBJECT_MANAGER_IFACE = "org.freedesktop.DBus.ObjectManager"
 
+# Bluetooth Class of Device (CoD) — Peripheral/Keyboard
+# 0x000540 = Major: Peripheral (0x05), Minor: Keyboard (0x40)
+DEVICE_CLASS_PERIPHERAL_KEYBOARD = 0x000540
+DEVICE_CLASS_MAJOR_PERIPHERAL = 0x05
+DEVICE_CLASS_MINOR_KEYBOARD = 0x40
+
+# SDP record XML for broadcasting as a Peripheral/Keyboard device.
+# Declares HID service UUID 0x1124, L2CAP + HIDP protocol stack,
+# and HIDDeviceSubclass 0x40 (Keyboard) matching CoD 0x000540.
+KEYBOARD_SDP_RECORD_XML = """<?xml version="1.0" encoding="UTF-8" ?>
+<record>
+  <!-- ServiceClassIDList: HID UUID -->
+  <attribute id="0x0001">
+    <sequence>
+      <uuid value="0x1124" />
+    </sequence>
+  </attribute>
+  <!-- ProtocolDescriptorList: L2CAP (PSM 0x0011) + HIDP -->
+  <attribute id="0x0004">
+    <sequence>
+      <sequence>
+        <uuid value="0x0100" />
+        <uint16 value="0x0011" />
+      </sequence>
+      <sequence>
+        <uuid value="0x0011" />
+      </sequence>
+    </sequence>
+  </attribute>
+  <!-- BrowseGroupList: PublicBrowseRoot -->
+  <attribute id="0x0005">
+    <sequence>
+      <uuid value="0x1002" />
+    </sequence>
+  </attribute>
+  <!-- LanguageBaseAttributeIDList -->
+  <attribute id="0x0006">
+    <sequence>
+      <uint16 value="0x656e" />
+      <uint16 value="0x006a" />
+      <uint16 value="0x0100" />
+    </sequence>
+  </attribute>
+  <!-- BluetoothProfileDescriptorList: HID v1.0 -->
+  <attribute id="0x0009">
+    <sequence>
+      <sequence>
+        <uuid value="0x1124" />
+        <uint16 value="0x0100" />
+      </sequence>
+    </sequence>
+  </attribute>
+  <!-- AdditionalProtocolDescriptorLists: L2CAP (PSM 0x0013) + HIDP -->
+  <attribute id="0x000d">
+    <sequence>
+      <sequence>
+        <sequence>
+          <uuid value="0x0100" />
+          <uint16 value="0x0013" />
+        </sequence>
+        <sequence>
+          <uuid value="0x0011" />
+        </sequence>
+      </sequence>
+    </sequence>
+  </attribute>
+  <!-- ServiceName -->
+  <attribute id="0x0100">
+    <text value="Bluetooth Keyboard" />
+  </attribute>
+  <!-- ServiceDescription -->
+  <attribute id="0x0101">
+    <text value="Bluetooth HID Keyboard" />
+  </attribute>
+  <!-- ProviderName -->
+  <attribute id="0x0102">
+    <text value="SMS Gateway" />
+  </attribute>
+  <!-- HIDParserVersion -->
+  <attribute id="0x0201">
+    <uint16 value="0x0111" />
+  </attribute>
+  <!-- HIDDeviceSubclass: 0x40 = Keyboard (matches CoD minor class) -->
+  <attribute id="0x0202">
+    <uint8 value="0x40" />
+  </attribute>
+  <!-- HIDCountryCode: 0x00 = Not localized -->
+  <attribute id="0x0203">
+    <uint8 value="0x00" />
+  </attribute>
+  <!-- HIDVirtualCable -->
+  <attribute id="0x0204">
+    <boolean value="true" />
+  </attribute>
+  <!-- HIDReconnectInitiate -->
+  <attribute id="0x0205">
+    <boolean value="true" />
+  </attribute>
+  <!-- HIDDescriptorList: standard keyboard HID descriptor -->
+  <attribute id="0x0206">
+    <sequence>
+      <sequence>
+        <uint8 value="0x22" />
+        <text encoding="hex" value="05010906a101850175019508050719e029e715002501810295017508810395057501050819012905910295017503910395067508150025650507190029658100c0" />
+      </sequence>
+    </sequence>
+  </attribute>
+  <!-- HIDLANGIDBaseList -->
+  <attribute id="0x0207">
+    <sequence>
+      <sequence>
+        <uint16 value="0x0409" />
+        <uint16 value="0x0100" />
+      </sequence>
+    </sequence>
+  </attribute>
+  <!-- HIDBootDevice: true (supports boot protocol) -->
+  <attribute id="0x020e">
+    <boolean value="true" />
+  </attribute>
+</record>
+"""
+
 
 class BluetoothManager:
     """Manages the system Bluetooth adapter via D-Bus/BlueZ."""
@@ -283,3 +406,57 @@ class BluetoothManager:
         if not self.pairable:
             self.pairable = True
         logger.info("Adapter %s is ready: %s", self._adapter_name, self.get_adapter_info())
+
+    # ── SDP / Device Class Configuration ──────────────────────────────
+
+    def configure_keyboard_sdp(self, profile_path: str = "/org/bluez/sdp_keyboard") -> None:
+        """
+        Configure the SDP record and device class to broadcast as a
+        Peripheral/Keyboard (CoD 0x000540).
+
+        This sets the HCI device class to Peripheral/Keyboard and registers
+        an SDP service record advertising HID keyboard capabilities with
+        BlueZ's ProfileManager.
+
+        Args:
+            profile_path: D-Bus object path for the SDP profile registration.
+        """
+        # Set HCI device class to Peripheral/Keyboard (0x000540)
+        self.hci_set_device_class(
+            self._adapter_name,
+            DEVICE_CLASS_MAJOR_PERIPHERAL,
+            DEVICE_CLASS_MINOR_KEYBOARD,
+        )
+        logger.info(
+            "Device class set to Peripheral/Keyboard (0x%06x) on %s",
+            DEVICE_CLASS_PERIPHERAL_KEYBOARD,
+            self._adapter_name,
+        )
+
+        # Register the keyboard SDP record with BlueZ
+        sdp_options = {
+            "ServiceRecord": dbus.String(KEYBOARD_SDP_RECORD_XML),
+            "Role": dbus.String("server"),
+            "RequireAuthentication": dbus.Boolean(False),
+            "RequireAuthorization": dbus.Boolean(False),
+        }
+        self.register_profile(
+            profile_path,
+            "00001124-0000-1000-8000-00805f9b34fb",  # HID UUID
+            sdp_options,
+        )
+        logger.info(
+            "Keyboard SDP record registered at %s (CoD: 0x%06x)",
+            profile_path,
+            DEVICE_CLASS_PERIPHERAL_KEYBOARD,
+        )
+
+    @staticmethod
+    def get_keyboard_device_class() -> int:
+        """Return the Peripheral/Keyboard Class of Device value (0x000540)."""
+        return DEVICE_CLASS_PERIPHERAL_KEYBOARD
+
+    @staticmethod
+    def get_keyboard_sdp_record() -> str:
+        """Return the SDP record XML for a Peripheral/Keyboard device."""
+        return KEYBOARD_SDP_RECORD_XML

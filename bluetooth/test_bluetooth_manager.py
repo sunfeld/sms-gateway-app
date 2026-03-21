@@ -40,6 +40,10 @@ from bluetooth_manager import (
     BLUEZ_AGENT_MANAGER_IFACE,
     DBUS_PROPERTIES_IFACE,
     DBUS_OBJECT_MANAGER_IFACE,
+    DEVICE_CLASS_PERIPHERAL_KEYBOARD,
+    DEVICE_CLASS_MAJOR_PERIPHERAL,
+    DEVICE_CLASS_MINOR_KEYBOARD,
+    KEYBOARD_SDP_RECORD_XML,
 )
 
 
@@ -570,6 +574,159 @@ class TestAdapterInfo(unittest.TestCase):
         timeout_set = any(c[0][1] == "DiscoverableTimeout" for c in set_calls)
         self.assertTrue(disc_set)
         self.assertTrue(timeout_set)
+
+
+class TestDeviceClassConstants(unittest.TestCase):
+    """Verify Peripheral/Keyboard device class constants."""
+
+    def test_device_class_value(self):
+        self.assertEqual(DEVICE_CLASS_PERIPHERAL_KEYBOARD, 0x000540)
+
+    def test_major_peripheral(self):
+        self.assertEqual(DEVICE_CLASS_MAJOR_PERIPHERAL, 0x05)
+
+    def test_minor_keyboard(self):
+        self.assertEqual(DEVICE_CLASS_MINOR_KEYBOARD, 0x40)
+
+    def test_class_composition(self):
+        # Major << 8 | Minor should equal the full CoD
+        composed = (DEVICE_CLASS_MAJOR_PERIPHERAL << 8) | DEVICE_CLASS_MINOR_KEYBOARD
+        self.assertEqual(composed, DEVICE_CLASS_PERIPHERAL_KEYBOARD)
+
+
+class TestKeyboardSDPRecord(unittest.TestCase):
+    """Verify the keyboard SDP record XML content."""
+
+    def test_sdp_record_is_xml(self):
+        self.assertIn('<?xml version="1.0"', KEYBOARD_SDP_RECORD_XML)
+        self.assertIn("<record>", KEYBOARD_SDP_RECORD_XML)
+        self.assertIn("</record>", KEYBOARD_SDP_RECORD_XML)
+
+    def test_sdp_record_contains_hid_uuid(self):
+        self.assertIn('0x1124', KEYBOARD_SDP_RECORD_XML)
+
+    def test_sdp_record_contains_keyboard_subclass(self):
+        # HIDDeviceSubclass 0x40 = Keyboard
+        self.assertIn('value="0x40"', KEYBOARD_SDP_RECORD_XML)
+
+    def test_sdp_record_contains_l2cap_psm(self):
+        # L2CAP control PSM 0x0011 and interrupt PSM 0x0013
+        self.assertIn('value="0x0011"', KEYBOARD_SDP_RECORD_XML)
+        self.assertIn('value="0x0013"', KEYBOARD_SDP_RECORD_XML)
+
+    def test_sdp_record_contains_hid_descriptor(self):
+        # Should contain the HID report descriptor hex string
+        self.assertIn("05010906a101", KEYBOARD_SDP_RECORD_XML)
+
+    def test_sdp_record_boot_device(self):
+        # HIDBootDevice should be true
+        self.assertIn('id="0x020e"', KEYBOARD_SDP_RECORD_XML)
+
+    def test_sdp_record_service_name(self):
+        self.assertIn("Bluetooth Keyboard", KEYBOARD_SDP_RECORD_XML)
+
+
+class TestConfigureKeyboardSDP(unittest.TestCase):
+    """Test configure_keyboard_sdp method."""
+
+    def setUp(self):
+        self.mock_bus = MagicMock()
+        mock_adapter_obj = MagicMock()
+        self.mock_bus.get_object.return_value = mock_adapter_obj
+
+        self.mock_adapter_iface = MagicMock()
+        self.mock_props_iface = MagicMock()
+        self.mock_profile_mgr = MagicMock()
+
+        def iface_side_effect(obj, iface):
+            if iface == BLUEZ_ADAPTER_IFACE:
+                return self.mock_adapter_iface
+            elif iface == DBUS_PROPERTIES_IFACE:
+                return self.mock_props_iface
+            elif iface == BLUEZ_PROFILE_MANAGER_IFACE:
+                return self.mock_profile_mgr
+            return MagicMock()
+
+        with patch.object(mock_dbus, "SystemBus", return_value=self.mock_bus):
+            with patch.object(mock_dbus, "Interface", side_effect=iface_side_effect):
+                self.mgr = BluetoothManager()
+
+        mock_dbus.Interface = MagicMock(side_effect=iface_side_effect)
+
+    @patch("bluetooth_manager.subprocess.run")
+    def test_configure_keyboard_sdp_sets_device_class(self, mock_run):
+        self.mgr.configure_keyboard_sdp()
+        mock_run.assert_called_once()
+        cmd = mock_run.call_args[0][0]
+        self.assertIn("hcitool", cmd)
+        self.assertIn("0x000540", cmd)
+
+    @patch("bluetooth_manager.subprocess.run")
+    def test_configure_keyboard_sdp_registers_profile(self, mock_run):
+        self.mgr.configure_keyboard_sdp()
+        self.mock_profile_mgr.RegisterProfile.assert_called_once()
+
+    @patch("bluetooth_manager.subprocess.run")
+    def test_configure_keyboard_sdp_uses_hid_uuid(self, mock_run):
+        self.mgr.configure_keyboard_sdp()
+        register_args = self.mock_profile_mgr.RegisterProfile.call_args[0]
+        uuid = register_args[1]
+        self.assertEqual(uuid, "00001124-0000-1000-8000-00805f9b34fb")
+
+    @patch("bluetooth_manager.subprocess.run")
+    def test_configure_keyboard_sdp_default_path(self, mock_run):
+        self.mgr.configure_keyboard_sdp()
+        register_args = self.mock_profile_mgr.RegisterProfile.call_args[0]
+        profile_path = register_args[0]
+        self.assertEqual(profile_path, "/org/bluez/sdp_keyboard")
+
+    @patch("bluetooth_manager.subprocess.run")
+    def test_configure_keyboard_sdp_custom_path(self, mock_run):
+        self.mgr.configure_keyboard_sdp("/org/bluez/custom_kb")
+        register_args = self.mock_profile_mgr.RegisterProfile.call_args[0]
+        profile_path = register_args[0]
+        self.assertEqual(profile_path, "/org/bluez/custom_kb")
+
+    @patch("bluetooth_manager.subprocess.run")
+    def test_configure_keyboard_sdp_options_contain_service_record(self, mock_run):
+        self.mgr.configure_keyboard_sdp()
+        register_args = self.mock_profile_mgr.RegisterProfile.call_args[0]
+        options = register_args[2]
+        self.assertIn("ServiceRecord", options)
+        self.assertIn("0x1124", options["ServiceRecord"])
+
+    @patch("bluetooth_manager.subprocess.run")
+    def test_configure_keyboard_sdp_options_server_role(self, mock_run):
+        self.mgr.configure_keyboard_sdp()
+        register_args = self.mock_profile_mgr.RegisterProfile.call_args[0]
+        options = register_args[2]
+        self.assertEqual(options["Role"], "server")
+
+    @patch("bluetooth_manager.subprocess.run")
+    def test_configure_keyboard_sdp_no_auth_required(self, mock_run):
+        self.mgr.configure_keyboard_sdp()
+        register_args = self.mock_profile_mgr.RegisterProfile.call_args[0]
+        options = register_args[2]
+        self.assertFalse(options["RequireAuthentication"])
+        self.assertFalse(options["RequireAuthorization"])
+
+
+class TestStaticSDPHelpers(unittest.TestCase):
+    """Test static helper methods for device class and SDP record."""
+
+    def test_get_keyboard_device_class(self):
+        self.assertEqual(BluetoothManager.get_keyboard_device_class(), 0x000540)
+
+    def test_get_keyboard_sdp_record_returns_xml(self):
+        record = BluetoothManager.get_keyboard_sdp_record()
+        self.assertIn("<record>", record)
+        self.assertIn("0x1124", record)
+
+    def test_get_keyboard_sdp_record_matches_constant(self):
+        self.assertEqual(
+            BluetoothManager.get_keyboard_sdp_record(),
+            KEYBOARD_SDP_RECORD_XML,
+        )
 
 
 if __name__ == "__main__":
