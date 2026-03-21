@@ -137,7 +137,7 @@ The app is **functionally complete** for its MVP scope. The debug APK is install
 - [x] Documentation & Demo: Record demo screencast and update docs for "Implement `start_rapid_advertising()` function using `hcitool` or `mgmt` API ..."
   - **Verification Tests**:
     - [x] Functionality verified manually
-    - [ ] Automated tests pass (or written if missing)
+    - [x] Automated tests pass (or written if missing)
     - [x] No regressions introduced
 - [ ] Build a `TargetScanner` module using `bleak` to identify nearby iOS devices via Apple-specific manufacturer data (ID 0x004c).
   - **Verification Tests**:
