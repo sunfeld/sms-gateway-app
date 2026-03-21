@@ -164,7 +164,7 @@ The app is **functionally complete** for its MVP scope. The debug APK is install
     - [ ] Functionality verified manually
     - [ ] Automated tests pass (or written if missing)
     - [ ] No regressions introduced
-- [ ] Documentation & Demo: Record demo screencast and update docs for "Create an asynchronous loop in `attack_orchestrator.py` to cycle through the ..."
+- [x] Documentation & Demo: Record demo screencast and update docs for "Create an asynchronous loop in `attack_orchestrator.py` to cycle through the ..."
   - **Verification Tests**:
     - [ ] Functionality verified manually
     - [ ] Automated tests pass (or written if missing)
