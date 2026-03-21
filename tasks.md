@@ -102,11 +102,11 @@ The app is **functionally complete** for its MVP scope. The debug APK is install
 - [ ] Implement `BluetoothKeyboardProfile` class inheriting from BlueZ Profile1 to define HID keyboard service UUID (0x1124).
   - **Verification Tests**:
     - [x] Functionality verified manually
-    - [ ] Automated tests pass (or written if missing)
+    - [x] Automated tests pass (or written if missing)
     - [x] No regressions introduced
 - [x] Documentation & Demo: Record demo screencast and update docs for "Implement `BluetoothKeyboardProfile` class inheriting from BlueZ Profile1 to ..."
   - **Verification Tests**:
-    - [ ] Functionality verified manually
+    - [x] Functionality verified manually
     - [x] Automated tests pass (or written if missing)
     - [ ] No regressions introduced
 - [ ] Configure SDP (Service Discovery Protocol) record in `bluetooth_manager.py` to broadcast device class as a Peripheral/Keyboard (0x000540).
