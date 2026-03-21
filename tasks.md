@@ -151,9 +151,9 @@ The app is **functionally complete** for its MVP scope. The debug APK is install
     - [x] No regressions introduced
 - [ ] Implement `trigger_pairing_request()` to initiate outbound HID connection attempts to discovered peer addresses.
   - **Verification Tests**:
-    - [ ] Functionality verified manually
+    - [x] Functionality verified manually
     - [x] Automated tests pass (or written if missing)
-    - [ ] No regressions introduced
+    - [x] No regressions introduced
 - [x] Documentation & Demo: Record demo screencast and update docs for "Implement `trigger_pairing_request()` to initiate outbound HID connection att..."
   - **Verification Tests**:
     - [x] Functionality verified manually
