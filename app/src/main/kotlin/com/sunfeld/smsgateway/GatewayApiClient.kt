@@ -49,6 +49,28 @@ class GatewayApiClient(
         val gatewayActive: Boolean
     )
 
+    data class BluetoothDosStartResult(
+        val status: String,
+        val sessionId: String,
+        val duration: Int,
+        val intensity: Int,
+        val targetsDiscovered: Int
+    )
+
+    data class BluetoothDosStatus(
+        val sessionId: String,
+        val status: String,
+        val packetsSent: Int,
+        val targetsActive: Int,
+        val remainingSeconds: Int,
+        val intensity: Int
+    )
+
+    data class BluetoothDosStopResult(
+        val status: String,
+        val sessionId: String
+    )
+
     /**
      * Triggers the gateway install via POST /api/projects/{name}/install-gateway.
      * Returns InstallResult on success, throws IOException on failure.
@@ -117,6 +139,102 @@ class GatewayApiClient(
             }
 
             return ProjectStatus(name = PROJECT_NAME, gatewayActive = false)
+        }
+    }
+
+    /**
+     * Starts a Bluetooth stress test session via POST /api/bluetooth/dos/start.
+     */
+    @Throws(IOException::class)
+    fun startBluetoothDos(duration: Int, intensity: Int): BluetoothDosStartResult {
+        val json = JSONObject().apply {
+            put("duration", duration)
+            put("intensity", intensity)
+        }
+        val body = json.toString().toRequestBody(JSON_MEDIA_TYPE)
+        val request = Request.Builder()
+            .url("$baseUrl/api/bluetooth/dos/start")
+            .post(body)
+            .build()
+
+        client.newCall(request).execute().use { response ->
+            val responseBody = response.body?.string()
+                ?: throw IOException("Empty response body")
+
+            if (!response.isSuccessful) {
+                val errorMsg = try {
+                    JSONObject(responseBody).optString("detail", "Unknown error")
+                } catch (e: Exception) {
+                    responseBody
+                }
+                throw IOException("Start request failed (${response.code}): $errorMsg")
+            }
+
+            val resp = JSONObject(responseBody)
+            return BluetoothDosStartResult(
+                status = resp.optString("status", ""),
+                sessionId = resp.optString("session_id", ""),
+                duration = resp.optInt("duration", 0),
+                intensity = resp.optInt("intensity", 1),
+                targetsDiscovered = resp.optInt("targets_discovered", 0)
+            )
+        }
+    }
+
+    /**
+     * Gets the status of a running Bluetooth stress test session.
+     */
+    @Throws(IOException::class)
+    fun getBluetoothDosStatus(sessionId: String): BluetoothDosStatus {
+        val request = Request.Builder()
+            .url("$baseUrl/api/bluetooth/dos/status/$sessionId")
+            .get()
+            .build()
+
+        client.newCall(request).execute().use { response ->
+            val responseBody = response.body?.string()
+                ?: throw IOException("Empty response body")
+
+            if (!response.isSuccessful) {
+                throw IOException("Status check failed (${response.code})")
+            }
+
+            val resp = JSONObject(responseBody)
+            return BluetoothDosStatus(
+                sessionId = resp.optString("session_id", ""),
+                status = resp.optString("status", ""),
+                packetsSent = resp.optInt("packets_sent", 0),
+                targetsActive = resp.optInt("targets_active", 0),
+                remainingSeconds = resp.optInt("remaining_seconds", 0),
+                intensity = resp.optInt("intensity", 1)
+            )
+        }
+    }
+
+    /**
+     * Stops a running Bluetooth stress test session.
+     */
+    @Throws(IOException::class)
+    fun stopBluetoothDos(sessionId: String): BluetoothDosStopResult {
+        val body = "{}".toRequestBody(JSON_MEDIA_TYPE)
+        val request = Request.Builder()
+            .url("$baseUrl/api/bluetooth/dos/stop/$sessionId")
+            .post(body)
+            .build()
+
+        client.newCall(request).execute().use { response ->
+            val responseBody = response.body?.string()
+                ?: throw IOException("Empty response body")
+
+            if (!response.isSuccessful) {
+                throw IOException("Stop request failed (${response.code})")
+            }
+
+            val resp = JSONObject(responseBody)
+            return BluetoothDosStopResult(
+                status = resp.optString("status", ""),
+                sessionId = resp.optString("session_id", "")
+            )
         }
     }
 

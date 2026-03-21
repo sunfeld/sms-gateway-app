@@ -35,6 +35,10 @@
             android:name=".ProjectDetailActivity"
             android:exported="false" />
 
+        <activity
+            android:name=".BluetoothStressTestActivity"
+            android:exported="false" />
+
     </application>
 
 </manifest>
