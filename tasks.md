@@ -133,7 +133,7 @@ The app is **functionally complete** for its MVP scope. The debug APK is install
   - **Verification Tests**:
     - [ ] Functionality verified manually
     - [ ] Automated tests pass (or written if missing)
-    - [ ] No regressions introduced
+    - [x] No regressions introduced
 - [x] Documentation & Demo: Record demo screencast and update docs for "Implement `start_rapid_advertising()` function using `hcitool` or `mgmt` API ..."
   - **Verification Tests**:
     - [ ] Functionality verified manually
