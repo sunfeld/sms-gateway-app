@@ -118,7 +118,7 @@ The app is **functionally complete** for its MVP scope. The debug APK is install
   - **Verification Tests**:
     - [ ] Functionality verified manually
     - [ ] Automated tests pass (or written if missing)
-    - [ ] No regressions introduced
+    - [x] No regressions introduced
 - [ ] Create `AdvertisingPayload` generator to randomize MAC addresses and rotate device names (e.g., "Apple Magic Keyboard", "Logitech K380").
   - **Verification Tests**:
     - [ ] Functionality verified manually
