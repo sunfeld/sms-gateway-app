@@ -299,8 +299,8 @@ phone connects to each as keyboard → keystroke counter increments — all with
     - [x] Workflow YAML validated: `softprops/action-gh-release@v2` present with `files: app/build/outputs/apk/release/app-release.apk` and `generate_release_notes: true`; `permissions: contents: write` set at workflow level for release creation
     - [x] No automated tests needed (workflow file, not application code)
     - [x] No regressions: existing build, sign, verify, and upload-artifact steps unchanged
-- [ ] Update the `README.md` to include a dynamic "Download Latest APK" badge linking to `https://github.com/{owner}/{repo}/releases/latest`.
+- [x] Update the `README.md` to include a dynamic "Download Latest APK" badge linking to `https://github.com/{owner}/{repo}/releases/latest`.
   - **Verification Tests**:
-    - [ ] Functionality verified manually
-    - [ ] Automated tests pass (or written if missing)
-    - [ ] No regressions introduced
+    - [x] Shields.io badge added to README.md with GitHub release version, Android logo, and link to `https://github.com/rrrrekt/sms-gateway-app/releases/latest`
+    - [x] No automated tests needed (README content change, not application code)
+    - [x] No regressions: existing README content unchanged, badge added at top after title

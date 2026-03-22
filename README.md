@@ -1,5 +1,7 @@
 # SMS Gateway App
 
+[![Download Latest APK](https://img.shields.io/github/v/release/rrrrekt/sms-gateway-app?label=Download%20Latest%20APK&logo=android&style=for-the-badge)](https://github.com/rrrrekt/sms-gateway-app/releases/latest)
+
 An Android application for sending and receiving SMS messages programmatically. Built as part of the Sunfeld infrastructure to provide SMS gateway capabilities from an Android device.
 
 ## Project Scope
