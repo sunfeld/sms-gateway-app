@@ -217,15 +217,15 @@ The app is **functionally complete** for its MVP scope. The debug APK is install
     - [x] Functionality verified manually
     - [ ] Automated tests pass (or written if missing)
     - [x] No regressions introduced
-- [ ] : Create the `InstallResult` sealed class with `Idle`, `Installing`, `Success`, and `Error(message)` states to manage the UI lifecycle.
-  - **Verification Tests**:
-    - [ ] Functionality verified manually
-    - [ ] Automated tests pass (or written if missing)
-    - [x] No regressions introduced
-- [ ] Documentation & Demo: Record demo screencast and update docs for ": Create the `InstallResult` sealed class with `Idle`, `Installing`, `Success..."
+- [x] : Create the `InstallResult` sealed class with `Idle`, `Installing`, `Success`, and `Error(message)` states to manage the UI lifecycle.
   - **Verification Tests**:
     - [x] Functionality verified manually
-    - [ ] Automated tests pass (or written if missing)
+    - [x] Automated tests pass (or written if missing)
+    - [x] No regressions introduced
+- [x] Documentation & Demo: Record demo screencast and update docs for ": Create the `InstallResult` sealed class with `Idle`, `Installing`, `Success..."
+  - **Verification Tests**:
+    - [x] Functionality verified manually
+    - [x] Automated tests pass (or written if missing)
     - [x] No regressions introduced
 - [ ] : Implement `ProjectViewModel.kt` using `viewModelScope` to execute the gateway installation request and expose state via `MutableStateFlow`.
   - **Verification Tests**:
