@@ -227,7 +227,7 @@ The app is **functionally complete** for its MVP scope. The debug APK is install
     - [x] Functionality verified manually
     - [x] Automated tests pass (or written if missing)
     - [x] No regressions introduced
-- [ ] : Implement `ProjectViewModel.kt` using `viewModelScope` to execute the gateway installation request and expose state via `MutableStateFlow`.
+- [x] : Implement `ProjectViewModel.kt` using `viewModelScope` to execute the gateway installation request and expose state via `MutableStateFlow`.
   - **Verification Tests**:
     - [x] Functionality verified manually
     - [x] Automated tests pass (or written if missing)
