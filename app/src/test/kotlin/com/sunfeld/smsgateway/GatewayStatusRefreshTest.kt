@@ -582,11 +582,11 @@ class GatewayStatusRefreshTest {
     // ---- GatewayApiClient configuration tests ----
 
     @Test
-    fun `GatewayApiClient uses Android emulator localhost alias`() {
+    fun `Config BASE_URL points to gateway host`() {
         assertEquals(
-            "Default base URL should use 10.0.2.2 (Android emulator host alias)",
-            "http://10.0.2.2:3001",
-            GatewayApiClient.DEFAULT_BASE_URL
+            "BASE_URL should target the gateway host at 10.0.0.2:8080",
+            "http://10.0.0.2:8080",
+            Config.BASE_URL
         )
     }
 

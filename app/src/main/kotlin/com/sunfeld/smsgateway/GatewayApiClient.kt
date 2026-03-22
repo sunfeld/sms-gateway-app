@@ -14,11 +14,9 @@ import java.util.concurrent.TimeUnit
  * to trigger and monitor SMS Gateway installation.
  */
 class GatewayApiClient(
-    private val baseUrl: String = DEFAULT_BASE_URL
+    private val baseUrl: String = Config.BASE_URL
 ) {
     companion object {
-        // 10.0.2.2 is the Android emulator alias for host loopback
-        const val DEFAULT_BASE_URL = "http://10.0.2.2:3001"
         const val PROJECT_NAME = "sms-gateway-app"
         private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
     }
