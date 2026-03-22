@@ -8,16 +8,31 @@
     <string name="gateway_status_installed">SMS Gateway: Installed</string>
     <string name="gateway_status_not_installed">SMS Gateway: Not Installed</string>
     <string name="project_details">Project Details</string>
-    <string name="bluetooth_stress_test">Bluetooth Stress Test</string>
-    <string name="bluetooth_stress_test_title">Bluetooth Stress Test</string>
-    <string name="bluetooth_stress_test_description">Toggle to start or stop a Bluetooth pairing stress test against nearby devices.</string>
-    <string name="bluetooth_stress_test_toggle">Stress Test Active</string>
-    <string name="packets_sent_label">Packets Sent</string>
-    <string name="devices_targeted_label">Devices Targeted</string>
+    <!-- Legacy strings kept for compatibility -->
+    <string name="bluetooth_stress_test">BT Keyboard HID</string>
+    <string name="bluetooth_stress_test_title">BT Keyboard HID</string>
+    <string name="bluetooth_stress_test_description">Scans for nearby Bluetooth devices and impersonates a keyboard to each one found.</string>
+    <string name="bluetooth_stress_test_toggle">HID Attack Active</string>
+    <string name="packets_sent_label">Keystrokes Sent</string>
+    <string name="devices_targeted_label">Connected</string>
     <string name="stress_test_status_idle">Status: Idle</string>
     <string name="stress_test_status_starting">Status: Starting…</string>
     <string name="stress_test_status_running">Status: Running</string>
     <string name="stress_test_status_stopping">Status: Stopping…</string>
     <string name="stress_test_status_error">Status: Error</string>
     <string name="stress_test_remaining_time">Time remaining: %1$ds</string>
+    <!-- New HID strings -->
+    <string name="bluetooth_hid_title">Bluetooth HID Keyboard</string>
+    <string name="bluetooth_hid_description">Scans for nearby Bluetooth devices and connects to each one as a keyboard. No server needed — runs entirely on this device.</string>
+    <string name="bluetooth_hid_toggle">HID Attack Active</string>
+    <string name="attack_state_idle">Status: Idle</string>
+    <string name="attack_state_scanning">Status: Scanning for devices…</string>
+    <string name="attack_state_attacking">Status: Attacking %1$d device(s)</string>
+    <string name="attack_state_stopping">Status: Stopping…</string>
+    <string name="attack_state_error">Status: Error</string>
+    <string name="keystrokes_sent_label">Keystrokes Sent</string>
+    <string name="connected_label">Connected</string>
+    <string name="discovered_devices_header">Discovered Devices</string>
+    <string name="device_status_discovered">Discovered</string>
+    <string name="device_status_connected">Connected ⌨</string>
 </resources>

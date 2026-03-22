@@ -1,10 +1,16 @@
 package com.sunfeld.smsgateway
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import android.view.View
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.materialswitch.MaterialSwitch
 import com.google.android.material.textview.MaterialTextView
 
@@ -14,11 +20,36 @@ class BluetoothStressTestActivity : AppCompatActivity() {
     private lateinit var txtStatus: MaterialTextView
     private lateinit var txtPacketsSentCount: MaterialTextView
     private lateinit var txtDevicesTargetedCount: MaterialTextView
-    private lateinit var txtRemainingTime: MaterialTextView
+    private lateinit var txtDevicesHeader: MaterialTextView
+    private lateinit var recyclerDevices: RecyclerView
 
+    private val deviceAdapter = BtDeviceAdapter()
     private val viewModel: BluetoothStressTestViewModel by viewModels()
-
     private var isUpdatingSwitch = false
+
+    private val btPermissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        arrayOf(
+            Manifest.permission.BLUETOOTH_SCAN,
+            Manifest.permission.BLUETOOTH_CONNECT,
+            Manifest.permission.BLUETOOTH_ADVERTISE
+        )
+    } else {
+        arrayOf(
+            Manifest.permission.ACCESS_FINE_LOCATION
+        )
+    }
+
+    private val permissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { grants ->
+        val allGranted = grants.values.all { it }
+        if (allGranted) {
+            viewModel.startAttack(this)
+        } else {
+            Toast.makeText(this, "Bluetooth permissions required", Toast.LENGTH_LONG).show()
+            setSwitchChecked(false)
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -28,64 +59,76 @@ class BluetoothStressTestActivity : AppCompatActivity() {
         txtStatus = findViewById(R.id.txtStatus)
         txtPacketsSentCount = findViewById(R.id.txtPacketsSentCount)
         txtDevicesTargetedCount = findViewById(R.id.txtDevicesTargetedCount)
-        txtRemainingTime = findViewById(R.id.txtRemainingTime)
+        txtDevicesHeader = findViewById(R.id.txtDevicesHeader)
+        recyclerDevices = findViewById(R.id.recyclerDevices)
+
+        recyclerDevices.layoutManager = LinearLayoutManager(this)
+        recyclerDevices.adapter = deviceAdapter
 
         switchStressTest.setOnCheckedChangeListener { _, isChecked ->
             if (isUpdatingSwitch) return@setOnCheckedChangeListener
             if (isChecked) {
-                viewModel.startStressTest()
+                requestPermissionsAndStart()
             } else {
-                viewModel.stopStressTest()
+                viewModel.stopAttack(this)
             }
         }
 
-        viewModel.state.observe(this) { state ->
-            updateUI(state)
-        }
+        viewModel.state.observe(this) { updateUI(it) }
 
-        viewModel.packetsSent.observe(this) { count ->
+        viewModel.keystrokesSent.observe(this) { count ->
             txtPacketsSentCount.text = formatCount(count)
         }
 
-        viewModel.devicesTargeted.observe(this) { count ->
+        viewModel.connectedCount.observe(this) { count ->
             txtDevicesTargetedCount.text = count.toString()
+        }
+
+        viewModel.discoveredDevices.observe(this) { devices ->
+            deviceAdapter.updateDevices(devices)
+            val visible = devices.isNotEmpty()
+            txtDevicesHeader.visibility = if (visible) View.VISIBLE else View.GONE
+            recyclerDevices.visibility = if (visible) View.VISIBLE else View.GONE
         }
     }
 
-    private fun updateUI(state: StressTestState) {
+    private fun requestPermissionsAndStart() {
+        val missing = btPermissions.filter {
+            checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED
+        }
+        if (missing.isEmpty()) {
+            viewModel.startAttack(this)
+        } else {
+            permissionLauncher.launch(missing.toTypedArray())
+        }
+    }
+
+    private fun updateUI(state: AttackState) {
         when (state) {
-            is StressTestState.Idle -> {
+            is AttackState.Idle -> {
                 setSwitchChecked(false)
                 switchStressTest.isEnabled = true
-                txtStatus.text = getString(R.string.stress_test_status_idle)
-                txtRemainingTime.visibility = View.GONE
+                txtStatus.text = getString(R.string.attack_state_idle)
             }
-            is StressTestState.Starting -> {
-                setSwitchChecked(true)
-                switchStressTest.isEnabled = false
-                txtStatus.text = getString(R.string.stress_test_status_starting)
-                txtRemainingTime.visibility = View.GONE
-            }
-            is StressTestState.Running -> {
+            is AttackState.Scanning -> {
                 setSwitchChecked(true)
                 switchStressTest.isEnabled = true
-                txtStatus.text = getString(R.string.stress_test_status_running)
-                txtRemainingTime.visibility = View.VISIBLE
-                txtRemainingTime.text = getString(
-                    R.string.stress_test_remaining_time,
-                    state.remainingSeconds
-                )
+                txtStatus.text = getString(R.string.attack_state_scanning)
             }
-            is StressTestState.Stopping -> {
+            is AttackState.Attacking -> {
                 setSwitchChecked(true)
-                switchStressTest.isEnabled = false
-                txtStatus.text = getString(R.string.stress_test_status_stopping)
+                switchStressTest.isEnabled = true
+                txtStatus.text = getString(R.string.attack_state_attacking, state.connectedCount)
             }
-            is StressTestState.Error -> {
+            is AttackState.Stopping -> {
+                setSwitchChecked(false)
+                switchStressTest.isEnabled = false
+                txtStatus.text = getString(R.string.attack_state_stopping)
+            }
+            is AttackState.Error -> {
                 setSwitchChecked(false)
                 switchStressTest.isEnabled = true
-                txtStatus.text = getString(R.string.stress_test_status_error)
-                txtRemainingTime.visibility = View.GONE
+                txtStatus.text = getString(R.string.attack_state_error)
                 Toast.makeText(this, state.message, Toast.LENGTH_LONG).show()
                 viewModel.dismissError()
             }

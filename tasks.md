@@ -237,3 +237,42 @@ The app is **functionally complete** for its MVP scope. The debug APK is install
     - [x] Functionality verified manually
     - [x] Automated tests pass (or written if missing)
     - [x] No regressions introduced
+
+---
+
+## Phase 38: On-Device Bluetooth HID Keyboard Impersonation
+
+**Goal:** Remove all API calls from Bluetooth feature. The phone scans for nearby BT devices,
+connects to each as a Bluetooth HID keyboard (using Android BluetoothHidDevice API),
+and sends keystrokes — entirely on-device, no server needed.
+
+**Acceptance test:** Toggle activates BT scan → discovered devices appear in list →
+phone connects to each as keyboard → keystroke counter increments — all without any HTTP call.
+
+### 38.1 - Manifest & Build Config
+- [x] 38.1.1 Raise `minSdk` to 28 in `app/build.gradle.kts` (BluetoothHidDevice requires API 28); add `BLUETOOTH`, `BLUETOOTH_ADMIN`, `BLUETOOTH_CONNECT`, `BLUETOOTH_SCAN` permissions to `AndroidManifest.xml`; add `uses-feature android.hardware.bluetooth`
+  - **Test:** `grep -c "BLUETOOTH" app/src/main/AndroidManifest.xml` returns ≥4
+
+### 38.2 - HID Report Descriptor
+- [x] 38.2.1 Create `HidKeyReport.kt` with standard USB HID boot keyboard descriptor (8-byte report: modifier byte + reserved + 6 keycode slots), `buildKeyPress(char)` returning 8-byte array, `KEY_RELEASE` constant (all zeros), ASCII→HID keycode map covering a-z, A-Z, 0-9, space, enter, backspace
+  - **Test:** `HidKeyReport.buildKeyPress('A')` returns `[0x02, 0x00, 0x04, 0, 0, 0, 0, 0]`; `buildKeyPress('a')` returns `[0x00, 0x00, 0x04, 0, 0, 0, 0, 0]`
+
+### 38.3 - Bluetooth Scanner
+- [x] 38.3.1 Create `BluetoothScanner.kt` registering `BroadcastReceiver` for `ACTION_FOUND` + `ACTION_DISCOVERY_FINISHED`; exposes `fun startScan(context)`, `fun stopScan(context)`, `val devices: StateFlow<List<BluetoothDevice>>`; auto-restarts scan when finished while active
+  - **Test:** Broadcasting mock `ACTION_FOUND` intent causes `devices` StateFlow to emit updated list
+
+### 38.4 - Bluetooth HID Manager
+- [x] 38.4.1 Create `BluetoothHidManager.kt` that: (1) gets `BluetoothHidDevice` proxy via `getProfileProxy`, (2) registers keyboard app via `registerApp()` with `BluetoothHidDeviceAppSdpSettings` + standard descriptor, (3) implements `connect(device: BluetoothDevice)`, (4) implements `sendText(device, text: String)` cycling through chars with 30ms press+release delay, (5) implements `disconnectAll()`; exposes `connectedDevices: StateFlow<Set<BluetoothDevice>>`
+  - **Test:** `BluetoothHidManager` instantiates without crash; `sendText` builds correct byte sequence for "Hi"
+
+### 38.5 - ViewModel Redesign
+- [x] 38.5.1 Rewrite `BluetoothStressTestViewModel.kt`: replace `GatewayApiClient` with `BluetoothScanner` + `BluetoothHidManager`; state machine: `Idle → Scanning → Attacking → Idle`; expose `discoveredDevices: LiveData<List<BluetoothDevice>>`, `connectedCount: LiveData<Int>`, `keystrokesSent: LiveData<Int>`; on start → begin scan → for each found device call `hidManager.connect(device)` → on connect callback → loop `sendText` every 5s
+  - **Test:** Mock BluetoothHidManager injected into VM; `startAttack()` call transitions state to Scanning
+
+### 38.6 - UI Update
+- [x] 38.6.1 Update `activity_bluetooth_stress_test.xml`: rename "Packets Sent" counter to "Keystrokes Sent", "Devices Targeted" to "Connected"; add `RecyclerView` below counter card showing discovered device list (name + address + status chip); update `strings.xml` with new labels
+  - **Test:** Activity inflates without crash; switch toggle calls `viewModel.startAttack()`
+
+### 38.7 - Remove Dead API Methods
+- [x] 38.7.1 Remove `startBluetoothDos`, `getBluetoothDosStatus`, `stopBluetoothDos` methods from `GatewayApiClient.kt`; remove corresponding data classes `BluetoothDosStartResult`, `BluetoothDosStatus`, `BluetoothDosStopResult`; remove all BT API references from `BluetoothStressTestViewModel.kt`
+  - **Test:** `grep -r "BluetoothDos" app/src/main` returns no results

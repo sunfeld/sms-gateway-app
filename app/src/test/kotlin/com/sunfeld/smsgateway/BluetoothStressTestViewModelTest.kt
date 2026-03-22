@@ -3,13 +3,16 @@ package com.sunfeld.smsgateway
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertFalse
 import org.junit.Test
 import java.io.File
 
 /**
- * Unit tests for BluetoothStressTestViewModel, StressTestState sealed class,
- * GatewayApiClient Bluetooth DoS methods, and layout verification for the
- * "Bluetooth Stress Test" toggle dashboard feature.
+ * Unit tests for the on-device BT HID keyboard impersonation feature:
+ * AttackState sealed class, BluetoothStressTestViewModel source structure,
+ * HidKeyReport report generation, and layout verification.
+ *
+ * All Bluetooth functionality runs on-device — no API calls needed.
  */
 class BluetoothStressTestViewModelTest {
 
@@ -28,643 +31,404 @@ class BluetoothStressTestViewModelTest {
         }
     }
 
-    // ---- StressTestState sealed class tests ----
+    // ---- AttackState sealed class tests ----
 
     @Test
-    fun `StressTestState Idle is a singleton object`() {
-        val a = StressTestState.Idle
-        val b = StressTestState.Idle
+    fun `AttackState Idle is a singleton object`() {
+        val a = AttackState.Idle
+        val b = AttackState.Idle
         assertTrue("Idle should be the same instance", a === b)
     }
 
     @Test
-    fun `StressTestState Starting is a singleton object`() {
-        val a = StressTestState.Starting
-        val b = StressTestState.Starting
-        assertTrue("Starting should be the same instance", a === b)
+    fun `AttackState Scanning is a singleton object`() {
+        val a = AttackState.Scanning
+        val b = AttackState.Scanning
+        assertTrue("Scanning should be the same instance", a === b)
     }
 
     @Test
-    fun `StressTestState Stopping is a singleton object`() {
-        val a = StressTestState.Stopping
-        val b = StressTestState.Stopping
+    fun `AttackState Stopping is a singleton object`() {
+        val a = AttackState.Stopping
+        val b = AttackState.Stopping
         assertTrue("Stopping should be the same instance", a === b)
     }
 
     @Test
-    fun `StressTestState Running carries session data`() {
-        val state = StressTestState.Running(
-            sessionId = "bt-sess-123",
-            packetsSent = 42,
-            targetsActive = 3,
-            remainingSeconds = 50
-        )
-        assertEquals("bt-sess-123", state.sessionId)
-        assertEquals(42, state.packetsSent)
-        assertEquals(3, state.targetsActive)
-        assertEquals(50, state.remainingSeconds)
+    fun `AttackState Attacking carries connected count`() {
+        val state = AttackState.Attacking(connectedCount = 5)
+        assertEquals(5, state.connectedCount)
     }
 
     @Test
-    fun `StressTestState Error carries a message`() {
-        val state = StressTestState.Error("Connection lost")
-        assertEquals("Connection lost", state.message)
+    fun `AttackState Error carries a message`() {
+        val state = AttackState.Error("Permission denied")
+        assertEquals("Permission denied", state.message)
     }
 
     @Test
-    fun `StressTestState Error with different messages are not equal`() {
-        val a = StressTestState.Error("timeout")
-        val b = StressTestState.Error("refused")
+    fun `AttackState Error with different messages are not equal`() {
+        val a = AttackState.Error("timeout")
+        val b = AttackState.Error("refused")
         assertNotEquals(a, b)
     }
 
     @Test
-    fun `StressTestState Error with same message are equal`() {
-        val a = StressTestState.Error("timeout")
-        val b = StressTestState.Error("timeout")
+    fun `AttackState Error with same message are equal`() {
+        val a = AttackState.Error("timeout")
+        val b = AttackState.Error("timeout")
         assertEquals(a, b)
     }
 
     @Test
-    fun `StressTestState Running with same data are equal`() {
-        val a = StressTestState.Running("s1", 10, 2, 30)
-        val b = StressTestState.Running("s1", 10, 2, 30)
+    fun `AttackState Attacking instances with same count are equal`() {
+        val a = AttackState.Attacking(3)
+        val b = AttackState.Attacking(3)
         assertEquals(a, b)
     }
 
     @Test
-    fun `StressTestState Running with different data are not equal`() {
-        val a = StressTestState.Running("s1", 10, 2, 30)
-        val b = StressTestState.Running("s1", 20, 2, 30)
-        assertNotEquals(a, b)
-    }
+    fun `AttackState all variants are distinct types`() {
+        val idle: AttackState = AttackState.Idle
+        val scanning: AttackState = AttackState.Scanning
+        val attacking: AttackState = AttackState.Attacking(1)
+        val stopping: AttackState = AttackState.Stopping
+        val error: AttackState = AttackState.Error("e")
 
-    @Test
-    fun `StressTestState all variants are distinct types`() {
-        val idle: StressTestState = StressTestState.Idle
-        val starting: StressTestState = StressTestState.Starting
-        val running: StressTestState = StressTestState.Running("s", 0, 0, 0)
-        val stopping: StressTestState = StressTestState.Stopping
-        val error: StressTestState = StressTestState.Error("e")
-
-        assertNotEquals(idle, starting)
-        assertNotEquals(idle, running)
+        assertNotEquals(idle, scanning)
+        assertNotEquals(idle, attacking)
         assertNotEquals(idle, stopping)
         assertNotEquals(idle, error)
-        assertNotEquals(starting, running)
-        assertNotEquals(starting, stopping)
-        assertNotEquals(starting, error)
-        assertNotEquals(running, stopping)
-        assertNotEquals(running, error)
+        assertNotEquals(scanning, attacking)
+        assertNotEquals(scanning, stopping)
+        assertNotEquals(scanning, error)
+        assertNotEquals(attacking, stopping)
+        assertNotEquals(attacking, error)
         assertNotEquals(stopping, error)
     }
 
     @Test
-    fun `StressTestState can be exhaustively matched with when`() {
+    fun `AttackState can be exhaustively matched with when`() {
         val states = listOf(
-            StressTestState.Idle,
-            StressTestState.Starting,
-            StressTestState.Running("s1", 5, 2, 10),
-            StressTestState.Stopping,
-            StressTestState.Error("fail")
+            AttackState.Idle,
+            AttackState.Scanning,
+            AttackState.Attacking(3),
+            AttackState.Stopping,
+            AttackState.Error("fail")
         )
 
         val labels = states.map { state ->
             when (state) {
-                is StressTestState.Idle -> "idle"
-                is StressTestState.Starting -> "starting"
-                is StressTestState.Running -> "running:${state.packetsSent}"
-                is StressTestState.Stopping -> "stopping"
-                is StressTestState.Error -> "error:${state.message}"
+                is AttackState.Idle -> "idle"
+                is AttackState.Scanning -> "scanning"
+                is AttackState.Attacking -> "attacking:${state.connectedCount}"
+                is AttackState.Stopping -> "stopping"
+                is AttackState.Error -> "error:${state.message}"
             }
         }
 
         assertEquals(
-            listOf("idle", "starting", "running:5", "stopping", "error:fail"),
+            listOf("idle", "scanning", "attacking:3", "stopping", "error:fail"),
             labels
         )
     }
 
-    // ---- BluetoothStressTestViewModel source verification ----
+    // ---- HidKeyReport unit tests ----
+
+    @Test
+    fun `HidKeyReport KEY_RELEASE is 8 zero bytes`() {
+        val release = HidKeyReport.KEY_RELEASE
+        assertEquals(8, release.size)
+        assertTrue("All bytes must be zero", release.all { it == 0.toByte() })
+    }
+
+    @Test
+    fun `HidKeyReport KEYBOARD_DESCRIPTOR is not empty`() {
+        assertTrue(HidKeyReport.KEYBOARD_DESCRIPTOR.isNotEmpty())
+    }
+
+    @Test
+    fun `HidKeyReport buildKeyPress for lowercase a returns correct report`() {
+        val report = HidKeyReport.buildKeyPress('a')!!
+        assertEquals(8, report.size)
+        assertEquals(0x00.toByte(), report[0]) // no modifier
+        assertEquals(0x00.toByte(), report[1]) // reserved
+        assertEquals(0x04.toByte(), report[2]) // HID keycode for 'a'
+    }
+
+    @Test
+    fun `HidKeyReport buildKeyPress for uppercase A uses Left Shift modifier`() {
+        val report = HidKeyReport.buildKeyPress('A')!!
+        assertEquals(8, report.size)
+        assertEquals(0x02.toByte(), report[0]) // Left Shift
+        assertEquals(0x00.toByte(), report[1]) // reserved
+        assertEquals(0x04.toByte(), report[2]) // HID keycode for 'a'/'A'
+    }
+
+    @Test
+    fun `HidKeyReport buildKeyPress for space returns 0x2C keycode`() {
+        val report = HidKeyReport.buildKeyPress(' ')!!
+        assertEquals(0x2C.toByte(), report[2])
+        assertEquals(0x00.toByte(), report[0]) // no modifier
+    }
+
+    @Test
+    fun `HidKeyReport buildKeyPress for newline returns 0x28 keycode`() {
+        val report = HidKeyReport.buildKeyPress('\n')!!
+        assertEquals(0x28.toByte(), report[2])
+    }
+
+    @Test
+    fun `HidKeyReport buildKeyPress for digit 1 returns 0x1E keycode`() {
+        val report = HidKeyReport.buildKeyPress('1')!!
+        assertEquals(0x1E.toByte(), report[2])
+        assertEquals(0x00.toByte(), report[0]) // no modifier
+    }
+
+    @Test
+    fun `HidKeyReport buildKeyPress for unmapped char returns null`() {
+        val report = HidKeyReport.buildKeyPress('\u0001') // control char
+        assertTrue("Unmapped char must return null", report == null)
+    }
+
+    @Test
+    fun `HidKeyReport buildSequence returns press-release pairs`() {
+        val sequence = HidKeyReport.buildSequence("Hi")
+        // H = press + release, i = press + release = 4 reports
+        assertEquals(4, sequence.size)
+        // First report = H press (shift + 0x0B)
+        assertEquals(0x02.toByte(), sequence[0][0]) // Left Shift for 'H'
+        // Second report = release (all zeros)
+        assertTrue(sequence[1].all { it == 0.toByte() })
+    }
+
+    @Test
+    fun `HidKeyReport buildSequence skips unmapped chars`() {
+        val sequence = HidKeyReport.buildSequence("a\u0001b") // \u0001 is unmapped
+        // a + b = 4 reports (press+release each), \u0001 skipped
+        assertEquals(4, sequence.size)
+    }
+
+    @Test
+    fun `HidKeyReport all lowercase letters a-z map to keycodes 0x04-0x1D`() {
+        for (i in 0..25) {
+            val c = 'a' + i
+            val report = HidKeyReport.buildKeyPress(c)
+            assertTrue("$c must be mappable", report != null)
+            assertEquals("$c must map to keycode ${0x04 + i}", (0x04 + i).toByte(), report!![2])
+            assertEquals("$c must have no modifier", 0x00.toByte(), report[0])
+        }
+    }
+
+    @Test
+    fun `HidKeyReport all uppercase letters A-Z map to keycodes 0x04-0x1D with shift`() {
+        for (i in 0..25) {
+            val c = 'A' + i
+            val report = HidKeyReport.buildKeyPress(c)
+            assertTrue("$c must be mappable", report != null)
+            assertEquals("$c must map to keycode ${0x04 + i}", (0x04 + i).toByte(), report!![2])
+            assertEquals("$c must have Left Shift modifier", 0x02.toByte(), report[0])
+        }
+    }
+
+    // ---- ViewModel source structure tests ----
 
     @Test
     fun `BluetoothStressTestViewModel source file exists`() {
-        val file = File(SOURCE_DIR, "BluetoothStressTestViewModel.kt")
-        assertTrue("BluetoothStressTestViewModel.kt must exist", file.exists())
+        assertTrue(File(SOURCE_DIR, "BluetoothStressTestViewModel.kt").exists())
     }
 
     @Test
     fun `BluetoothStressTestViewModel extends ViewModel`() {
         val content = File(SOURCE_DIR, "BluetoothStressTestViewModel.kt").readText()
-        assertTrue(
-            "BluetoothStressTestViewModel must extend ViewModel",
-            content.contains("class BluetoothStressTestViewModel : ViewModel()")
-        )
+        assertTrue(content.contains("class BluetoothStressTestViewModel : ViewModel()"))
     }
 
     @Test
-    fun `BluetoothStressTestViewModel exposes state as LiveData`() {
+    fun `BluetoothStressTestViewModel exposes state as LiveData of AttackState`() {
         val content = File(SOURCE_DIR, "BluetoothStressTestViewModel.kt").readText()
-        assertTrue(
-            "state must be exposed as LiveData<StressTestState>",
-            content.contains("val state: LiveData<StressTestState>")
-        )
+        assertTrue(content.contains("val state: LiveData<AttackState>"))
     }
 
     @Test
-    fun `BluetoothStressTestViewModel exposes packetsSent as LiveData`() {
+    fun `BluetoothStressTestViewModel exposes keystrokesSent as LiveData`() {
         val content = File(SOURCE_DIR, "BluetoothStressTestViewModel.kt").readText()
-        assertTrue(
-            "packetsSent must be exposed as LiveData<Int>",
-            content.contains("val packetsSent: LiveData<Int>")
-        )
+        assertTrue(content.contains("val keystrokesSent: LiveData<Int>"))
     }
 
     @Test
-    fun `BluetoothStressTestViewModel exposes devicesTargeted as LiveData`() {
+    fun `BluetoothStressTestViewModel exposes connectedCount as LiveData`() {
         val content = File(SOURCE_DIR, "BluetoothStressTestViewModel.kt").readText()
-        assertTrue(
-            "devicesTargeted must be exposed as LiveData<Int>",
-            content.contains("val devicesTargeted: LiveData<Int>")
-        )
+        assertTrue(content.contains("val connectedCount: LiveData<Int>"))
+    }
+
+    @Test
+    fun `BluetoothStressTestViewModel exposes discoveredDevices as LiveData`() {
+        val content = File(SOURCE_DIR, "BluetoothStressTestViewModel.kt").readText()
+        assertTrue(content.contains("val discoveredDevices: LiveData<List<BluetoothDevice>>"))
     }
 
     @Test
     fun `BluetoothStressTestViewModel initial state is Idle`() {
         val content = File(SOURCE_DIR, "BluetoothStressTestViewModel.kt").readText()
-        assertTrue(
-            "Initial state must be StressTestState.Idle",
-            content.contains("MutableLiveData<StressTestState>(StressTestState.Idle)")
-        )
+        assertTrue(content.contains("MutableLiveData<AttackState>(AttackState.Idle)"))
     }
 
     @Test
-    fun `BluetoothStressTestViewModel initial packetsSent is 0`() {
+    fun `BluetoothStressTestViewModel has startAttack method`() {
         val content = File(SOURCE_DIR, "BluetoothStressTestViewModel.kt").readText()
-        assertTrue(
-            "Initial packetsSent must be 0",
-            content.contains("MutableLiveData(0)") || content.contains("MutableLiveData<Int>(0)")
-        )
+        assertTrue(content.contains("fun startAttack("))
     }
 
     @Test
-    fun `BluetoothStressTestViewModel has startStressTest method`() {
+    fun `BluetoothStressTestViewModel has stopAttack method`() {
         val content = File(SOURCE_DIR, "BluetoothStressTestViewModel.kt").readText()
-        assertTrue(
-            "startStressTest method must exist",
-            content.contains("fun startStressTest(")
-        )
-    }
-
-    @Test
-    fun `BluetoothStressTestViewModel has stopStressTest method`() {
-        val content = File(SOURCE_DIR, "BluetoothStressTestViewModel.kt").readText()
-        assertTrue(
-            "stopStressTest method must exist",
-            content.contains("fun stopStressTest()")
-        )
+        assertTrue(content.contains("fun stopAttack("))
     }
 
     @Test
     fun `BluetoothStressTestViewModel has dismissError method`() {
         val content = File(SOURCE_DIR, "BluetoothStressTestViewModel.kt").readText()
-        assertTrue(
-            "dismissError method must exist",
-            content.contains("fun dismissError()")
-        )
+        assertTrue(content.contains("fun dismissError()"))
     }
 
     @Test
-    fun `startStressTest guards against duplicate calls when Running`() {
+    fun `BluetoothStressTestViewModel uses BluetoothScanner not GatewayApiClient for BT`() {
         val content = File(SOURCE_DIR, "BluetoothStressTestViewModel.kt").readText()
-        assertTrue(
-            "startStressTest must guard against Running state",
-            content.contains("StressTestState.Running") && content.contains("return")
-        )
+        assertTrue("Must use BluetoothScanner", content.contains("BluetoothScanner"))
+        assertFalse("Must NOT call startBluetoothDos", content.contains("startBluetoothDos"))
+        assertFalse("Must NOT call getBluetoothDosStatus", content.contains("getBluetoothDosStatus"))
+        assertFalse("Must NOT call stopBluetoothDos", content.contains("stopBluetoothDos"))
     }
 
     @Test
-    fun `startStressTest guards against duplicate calls when Starting`() {
+    fun `BluetoothStressTestViewModel uses BluetoothHidManager`() {
         val content = File(SOURCE_DIR, "BluetoothStressTestViewModel.kt").readText()
-        assertTrue(
-            "startStressTest must guard against Starting state",
-            content.contains("StressTestState.Starting") && content.contains("return")
-        )
+        assertTrue(content.contains("BluetoothHidManager"))
     }
 
     @Test
-    fun `startStressTest sets Starting state before API call`() {
+    fun `BluetoothStressTestViewModel overrides onCleared`() {
         val content = File(SOURCE_DIR, "BluetoothStressTestViewModel.kt").readText()
-        val methodStart = content.indexOf("fun startStressTest(")
-        val launchStart = content.indexOf("viewModelScope.launch", methodStart)
-
-        assertTrue("startStressTest must exist", methodStart >= 0)
-        assertTrue("viewModelScope.launch must exist", launchStart >= 0)
-
-        val startingSet = content.indexOf("StressTestState.Starting", methodStart)
-        assertTrue(
-            "StressTestState.Starting must be set before launching coroutine",
-            startingSet in (methodStart + 1) until launchStart
-        )
-    }
-
-    @Test
-    fun `startStressTest uses Dispatchers IO for network call`() {
-        val content = File(SOURCE_DIR, "BluetoothStressTestViewModel.kt").readText()
-        assertTrue(
-            "Network calls must run on Dispatchers.IO",
-            content.contains("Dispatchers.IO")
-        )
-    }
-
-    @Test
-    fun `startStressTest calls apiClient startBluetoothDos`() {
-        val content = File(SOURCE_DIR, "BluetoothStressTestViewModel.kt").readText()
-        assertTrue(
-            "Must call apiClient.startBluetoothDos",
-            content.contains("apiClient.startBluetoothDos(")
-        )
-    }
-
-    @Test
-    fun `stopStressTest calls apiClient stopBluetoothDos`() {
-        val content = File(SOURCE_DIR, "BluetoothStressTestViewModel.kt").readText()
-        assertTrue(
-            "Must call apiClient.stopBluetoothDos",
-            content.contains("apiClient.stopBluetoothDos(")
-        )
-    }
-
-    @Test
-    fun `stopStressTest guards against non-Running state`() {
-        val content = File(SOURCE_DIR, "BluetoothStressTestViewModel.kt").readText()
-        val methodStart = content.indexOf("fun stopStressTest()")
-        assertTrue("stopStressTest must exist", methodStart >= 0)
-        val methodBody = content.substring(methodStart, content.indexOf("fun ", methodStart + 1))
-        assertTrue(
-            "stopStressTest must check for Running state",
-            methodBody.contains("StressTestState.Running")
-        )
-    }
-
-    @Test
-    fun `stopStressTest sets Stopping state before API call`() {
-        val content = File(SOURCE_DIR, "BluetoothStressTestViewModel.kt").readText()
-        val methodStart = content.indexOf("fun stopStressTest()")
-        assertTrue("stopStressTest must exist", methodStart >= 0)
-        val methodBody = content.substring(methodStart, content.indexOf("fun ", methodStart + 1))
-        assertTrue(
-            "Must set Stopping state",
-            methodBody.contains("StressTestState.Stopping")
-        )
-    }
-
-    @Test
-    fun `BluetoothStressTestViewModel has polling mechanism`() {
-        val content = File(SOURCE_DIR, "BluetoothStressTestViewModel.kt").readText()
-        assertTrue(
-            "Must have polling job",
-            content.contains("pollingJob")
-        )
-    }
-
-    @Test
-    fun `BluetoothStressTestViewModel polls via getBluetoothDosStatus`() {
-        val content = File(SOURCE_DIR, "BluetoothStressTestViewModel.kt").readText()
-        assertTrue(
-            "Must poll status via apiClient.getBluetoothDosStatus",
-            content.contains("apiClient.getBluetoothDosStatus(")
-        )
-    }
-
-    @Test
-    fun `BluetoothStressTestViewModel handles completed status by returning to Idle`() {
-        val content = File(SOURCE_DIR, "BluetoothStressTestViewModel.kt").readText()
-        assertTrue(
-            "Must handle completed status",
-            content.contains("\"completed\"")
-        )
-        assertTrue(
-            "Must return to Idle when session ends",
-            content.contains("StressTestState.Idle")
-        )
-    }
-
-    @Test
-    fun `BluetoothStressTestViewModel handles polling errors`() {
-        val content = File(SOURCE_DIR, "BluetoothStressTestViewModel.kt").readText()
-        assertTrue(
-            "Must handle polling errors with StressTestState.Error",
-            content.contains("StressTestState.Error(")
-        )
-    }
-
-    @Test
-    fun `BluetoothStressTestViewModel overrides onCleared to stop polling`() {
-        val content = File(SOURCE_DIR, "BluetoothStressTestViewModel.kt").readText()
-        assertTrue(
-            "Must override onCleared",
-            content.contains("override fun onCleared()")
-        )
-        val onClearedStart = content.indexOf("override fun onCleared()")
-        val onClearedBody = content.substring(onClearedStart)
-        assertTrue(
-            "onCleared must stop polling",
-            onClearedBody.contains("stopPolling()")
-        )
-    }
-
-    @Test
-    fun `BluetoothStressTestViewModel has configurable apiClient`() {
-        val content = File(SOURCE_DIR, "BluetoothStressTestViewModel.kt").readText()
-        assertTrue(
-            "apiClient must be assignable for testing",
-            content.contains("var apiClient")
-        )
-    }
-
-    @Test
-    fun `startStressTest accepts duration and intensity parameters`() {
-        val content = File(SOURCE_DIR, "BluetoothStressTestViewModel.kt").readText()
-        assertTrue(
-            "startStressTest must accept duration parameter",
-            content.contains("duration: Int")
-        )
-        assertTrue(
-            "startStressTest must accept intensity parameter",
-            content.contains("intensity: Int")
-        )
+        assertTrue(content.contains("override fun onCleared()"))
     }
 
     @Test
     fun `dismissError resets state to Idle`() {
         val content = File(SOURCE_DIR, "BluetoothStressTestViewModel.kt").readText()
-        val dismissStart = content.indexOf("fun dismissError()")
-        assertTrue("dismissError must exist", dismissStart >= 0)
-        val dismissBody = content.substring(dismissStart, content.indexOf("}", dismissStart) + 1)
-        assertTrue(
-            "dismissError must set state to Idle",
-            dismissBody.contains("StressTestState.Idle")
-        )
+        val start = content.indexOf("fun dismissError()")
+        assertTrue(start >= 0)
+        val body = content.substring(start, content.indexOf("}", start) + 1)
+        assertTrue(body.contains("AttackState.Idle"))
     }
 
-    // ---- GatewayApiClient Bluetooth DoS methods ----
+    // ---- GatewayApiClient does NOT contain BT DoS methods ----
 
     @Test
-    fun `GatewayApiClient has startBluetoothDos method`() {
+    fun `GatewayApiClient has no startBluetoothDos method`() {
         val content = File(SOURCE_DIR, "GatewayApiClient.kt").readText()
-        assertTrue(
-            "GatewayApiClient must have startBluetoothDos method",
+        assertFalse(
+            "BT DoS is on-device now — GatewayApiClient must NOT have startBluetoothDos",
             content.contains("fun startBluetoothDos(")
         )
     }
 
     @Test
-    fun `GatewayApiClient startBluetoothDos accepts duration and intensity`() {
+    fun `GatewayApiClient has no getBluetoothDosStatus method`() {
         val content = File(SOURCE_DIR, "GatewayApiClient.kt").readText()
-        assertTrue(
-            "startBluetoothDos must accept duration: Int",
-            content.contains("fun startBluetoothDos(duration: Int, intensity: Int)")
-        )
-    }
-
-    @Test
-    fun `GatewayApiClient startBluetoothDos returns BluetoothDosStartResult`() {
-        val content = File(SOURCE_DIR, "GatewayApiClient.kt").readText()
-        assertTrue(
-            "startBluetoothDos must return BluetoothDosStartResult",
-            content.contains("fun startBluetoothDos(duration: Int, intensity: Int): BluetoothDosStartResult")
-        )
-    }
-
-    @Test
-    fun `GatewayApiClient has getBluetoothDosStatus method`() {
-        val content = File(SOURCE_DIR, "GatewayApiClient.kt").readText()
-        assertTrue(
-            "GatewayApiClient must have getBluetoothDosStatus method",
+        assertFalse(
+            "BT DoS is on-device now — GatewayApiClient must NOT have getBluetoothDosStatus",
             content.contains("fun getBluetoothDosStatus(")
         )
     }
 
     @Test
-    fun `GatewayApiClient getBluetoothDosStatus returns BluetoothDosStatus`() {
+    fun `GatewayApiClient has no stopBluetoothDos method`() {
         val content = File(SOURCE_DIR, "GatewayApiClient.kt").readText()
-        assertTrue(
-            "getBluetoothDosStatus must return BluetoothDosStatus",
-            content.contains("fun getBluetoothDosStatus(sessionId: String): BluetoothDosStatus")
-        )
-    }
-
-    @Test
-    fun `GatewayApiClient has stopBluetoothDos method`() {
-        val content = File(SOURCE_DIR, "GatewayApiClient.kt").readText()
-        assertTrue(
-            "GatewayApiClient must have stopBluetoothDos method",
+        assertFalse(
+            "BT DoS is on-device now — GatewayApiClient must NOT have stopBluetoothDos",
             content.contains("fun stopBluetoothDos(")
         )
     }
 
     @Test
-    fun `GatewayApiClient stopBluetoothDos returns BluetoothDosStopResult`() {
+    fun `GatewayApiClient still has installGateway method`() {
         val content = File(SOURCE_DIR, "GatewayApiClient.kt").readText()
-        assertTrue(
-            "stopBluetoothDos must return BluetoothDosStopResult",
-            content.contains("fun stopBluetoothDos(sessionId: String): BluetoothDosStopResult")
-        )
+        assertTrue(content.contains("fun installGateway()"))
     }
 
-    @Test
-    fun `GatewayApiClient posts to bluetooth dos start endpoint`() {
-        val content = File(SOURCE_DIR, "GatewayApiClient.kt").readText()
-        assertTrue(
-            "Must POST to /api/bluetooth/dos/start",
-            content.contains("/api/bluetooth/dos/start")
-        )
-    }
-
-    @Test
-    fun `GatewayApiClient gets bluetooth dos status endpoint`() {
-        val content = File(SOURCE_DIR, "GatewayApiClient.kt").readText()
-        assertTrue(
-            "Must GET /api/bluetooth/dos/status/",
-            content.contains("/api/bluetooth/dos/status/")
-        )
-    }
-
-    @Test
-    fun `GatewayApiClient posts to bluetooth dos stop endpoint`() {
-        val content = File(SOURCE_DIR, "GatewayApiClient.kt").readText()
-        assertTrue(
-            "Must POST to /api/bluetooth/dos/stop/",
-            content.contains("/api/bluetooth/dos/stop/")
-        )
-    }
-
-    @Test
-    fun `BluetoothDosStartResult data class has required fields`() {
-        val content = File(SOURCE_DIR, "GatewayApiClient.kt").readText()
-        assertTrue("Must have status field", content.contains("data class BluetoothDosStartResult"))
-        val classStart = content.indexOf("data class BluetoothDosStartResult")
-        val classBody = content.substring(classStart, content.indexOf(")", classStart) + 1)
-        assertTrue("Must have status", classBody.contains("val status: String"))
-        assertTrue("Must have sessionId", classBody.contains("val sessionId: String"))
-        assertTrue("Must have duration", classBody.contains("val duration: Int"))
-        assertTrue("Must have intensity", classBody.contains("val intensity: Int"))
-        assertTrue("Must have targetsDiscovered", classBody.contains("val targetsDiscovered: Int"))
-    }
-
-    @Test
-    fun `BluetoothDosStatus data class has required fields`() {
-        val content = File(SOURCE_DIR, "GatewayApiClient.kt").readText()
-        assertTrue("Must have BluetoothDosStatus class", content.contains("data class BluetoothDosStatus"))
-        val classStart = content.indexOf("data class BluetoothDosStatus")
-        val classBody = content.substring(classStart, content.indexOf(")", classStart) + 1)
-        assertTrue("Must have sessionId", classBody.contains("val sessionId: String"))
-        assertTrue("Must have status", classBody.contains("val status: String"))
-        assertTrue("Must have packetsSent", classBody.contains("val packetsSent: Int"))
-        assertTrue("Must have targetsActive", classBody.contains("val targetsActive: Int"))
-        assertTrue("Must have remainingSeconds", classBody.contains("val remainingSeconds: Int"))
-        assertTrue("Must have intensity", classBody.contains("val intensity: Int"))
-    }
-
-    @Test
-    fun `BluetoothDosStopResult data class has required fields`() {
-        val content = File(SOURCE_DIR, "GatewayApiClient.kt").readText()
-        assertTrue("Must have BluetoothDosStopResult class", content.contains("data class BluetoothDosStopResult"))
-        val classStart = content.indexOf("data class BluetoothDosStopResult")
-        val classBody = content.substring(classStart, content.indexOf(")", classStart) + 1)
-        assertTrue("Must have status", classBody.contains("val status: String"))
-        assertTrue("Must have sessionId", classBody.contains("val sessionId: String"))
-    }
-
-    // ---- Layout verification for activity_bluetooth_stress_test.xml ----
+    // ---- Layout verification ----
 
     @Test
     fun `Stress test layout file exists`() {
-        val layoutFile = File(LAYOUT_DIR, "activity_bluetooth_stress_test.xml")
-        assertTrue("activity_bluetooth_stress_test.xml must exist", layoutFile.exists())
+        assertTrue(File(LAYOUT_DIR, "activity_bluetooth_stress_test.xml").exists())
     }
 
     @Test
-    fun `Layout has MaterialSwitch toggle for stress test`() {
+    fun `Layout has MaterialSwitch toggle`() {
         val content = File(LAYOUT_DIR, "activity_bluetooth_stress_test.xml").readText()
-        assertTrue(
-            "Layout must contain a MaterialSwitch toggle",
-            content.contains("MaterialSwitch")
-        )
-        assertTrue(
-            "Toggle must have id switchStressTest",
-            content.contains("@+id/switchStressTest")
-        )
+        assertTrue(content.contains("MaterialSwitch"))
+        assertTrue(content.contains("@+id/switchStressTest"))
     }
 
     @Test
-    fun `Layout has packets sent counter`() {
+    fun `Layout has keystrokes sent counter`() {
         val content = File(LAYOUT_DIR, "activity_bluetooth_stress_test.xml").readText()
-        assertTrue(
-            "Layout must have a packets sent counter view",
-            content.contains("@+id/txtPacketsSentCount")
-        )
+        assertTrue(content.contains("@+id/txtPacketsSentCount"))
     }
 
     @Test
-    fun `Layout has devices targeted counter`() {
+    fun `Layout has connected devices counter`() {
         val content = File(LAYOUT_DIR, "activity_bluetooth_stress_test.xml").readText()
-        assertTrue(
-            "Layout must have a devices targeted counter view",
-            content.contains("@+id/txtDevicesTargetedCount")
-        )
-    }
-
-    @Test
-    fun `Layout has packets sent label`() {
-        val content = File(LAYOUT_DIR, "activity_bluetooth_stress_test.xml").readText()
-        assertTrue(
-            "Layout must reference packets_sent_label string",
-            content.contains("@string/packets_sent_label")
-        )
-    }
-
-    @Test
-    fun `Layout has devices targeted label`() {
-        val content = File(LAYOUT_DIR, "activity_bluetooth_stress_test.xml").readText()
-        assertTrue(
-            "Layout must reference devices_targeted_label string",
-            content.contains("@string/devices_targeted_label")
-        )
+        assertTrue(content.contains("@+id/txtDevicesTargetedCount"))
     }
 
     @Test
     fun `Layout has status text view`() {
         val content = File(LAYOUT_DIR, "activity_bluetooth_stress_test.xml").readText()
-        assertTrue(
-            "Layout must have a status text view",
-            content.contains("@+id/txtStatus")
-        )
+        assertTrue(content.contains("@+id/txtStatus"))
     }
 
     @Test
-    fun `Layout has remaining time text view`() {
+    fun `Layout has RecyclerView for discovered devices`() {
         val content = File(LAYOUT_DIR, "activity_bluetooth_stress_test.xml").readText()
-        assertTrue(
-            "Layout must have a remaining time text view",
-            content.contains("@+id/txtRemainingTime")
-        )
-    }
-
-    @Test
-    fun `Layout uses ConstraintLayout as root`() {
-        val content = File(LAYOUT_DIR, "activity_bluetooth_stress_test.xml").readText()
-        assertTrue(
-            "Root layout must be ConstraintLayout",
-            content.contains("androidx.constraintlayout.widget.ConstraintLayout")
-        )
+        assertTrue(content.contains("RecyclerView"))
+        assertTrue(content.contains("@+id/recyclerDevices"))
     }
 
     @Test
     fun `Layout uses MaterialCardView for counters`() {
         val content = File(LAYOUT_DIR, "activity_bluetooth_stress_test.xml").readText()
-        assertTrue(
-            "Counters must be wrapped in MaterialCardView",
-            content.contains("MaterialCardView")
-        )
-        assertTrue(
-            "CardView must have id cardCounters",
-            content.contains("@+id/cardCounters")
-        )
+        assertTrue(content.contains("MaterialCardView"))
+        assertTrue(content.contains("@+id/cardCounters"))
     }
 
     @Test
     fun `Layout counters use DisplaySmall text appearance`() {
         val content = File(LAYOUT_DIR, "activity_bluetooth_stress_test.xml").readText()
-        assertTrue(
-            "Counter values must use DisplaySmall appearance for prominence",
-            content.contains("textAppearanceDisplaySmall")
-        )
+        assertTrue(content.contains("textAppearanceDisplaySmall"))
     }
 
     @Test
     fun `Layout has title text view`() {
         val content = File(LAYOUT_DIR, "activity_bluetooth_stress_test.xml").readText()
-        assertTrue(
-            "Layout must have a title",
-            content.contains("@+id/txtTitle")
-        )
-        assertTrue(
-            "Title must reference bluetooth_stress_test_title string",
-            content.contains("@string/bluetooth_stress_test_title")
-        )
+        assertTrue(content.contains("@+id/txtTitle"))
+    }
+
+    // ---- HidKeyReport source verification ----
+
+    @Test
+    fun `HidKeyReport source file exists`() {
+        assertTrue(File(SOURCE_DIR, "HidKeyReport.kt").exists())
     }
 
     @Test
-    fun `Layout remaining time is initially gone`() {
-        val content = File(LAYOUT_DIR, "activity_bluetooth_stress_test.xml").readText()
-        val remainingStart = content.indexOf("txtRemainingTime")
-        assertTrue("txtRemainingTime must exist", remainingStart >= 0)
-        val remainingSection = content.substring(remainingStart, content.indexOf("/>", remainingStart) + 2)
-        assertTrue(
-            "Remaining time must be initially hidden",
-            remainingSection.contains("android:visibility=\"gone\"")
-        )
+    fun `BluetoothScanner source file exists`() {
+        assertTrue(File(SOURCE_DIR, "BluetoothScanner.kt").exists())
+    }
+
+    @Test
+    fun `BluetoothHidManager source file exists`() {
+        assertTrue(File(SOURCE_DIR, "BluetoothHidManager.kt").exists())
     }
 }
