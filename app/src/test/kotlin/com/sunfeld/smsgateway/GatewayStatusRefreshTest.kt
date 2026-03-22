@@ -305,8 +305,8 @@ class GatewayStatusRefreshTest {
         assertTrue("pollJobStatus must exist", pollStart >= 0)
         val pollBody = content.substring(pollStart)
         assertTrue(
-            "Must set InstallState.Success when job completes",
-            pollBody.contains("InstallState.Success")
+            "Must set InstallResult.Success when job completes",
+            pollBody.contains("InstallResult.Success")
         )
     }
 
@@ -317,8 +317,8 @@ class GatewayStatusRefreshTest {
         assertTrue("pollJobStatus must exist", pollStart >= 0)
         val pollBody = content.substring(pollStart)
         assertTrue(
-            "Must set InstallState.Error when job fails",
-            pollBody.contains("InstallState.Error")
+            "Must set InstallResult.Error when job fails",
+            pollBody.contains("InstallResult.Error")
         )
     }
 
@@ -376,7 +376,7 @@ class GatewayStatusRefreshTest {
         val installBody = content.substring(installStart)
         assertTrue(
             "Must handle ok=true without statusUrl as immediate success",
-            installBody.contains("result.ok") && installBody.contains("InstallState.Success(result.message)")
+            installBody.contains("result.ok") && installBody.contains("InstallResult.Success")
         )
     }
 
@@ -599,46 +599,45 @@ class GatewayStatusRefreshTest {
         )
     }
 
-    // ---- InstallState transition tests for polling scenarios ----
+    // ---- InstallResult transition tests for polling scenarios ----
 
     @Test
-    fun `InstallState transitions from Installing to Success`() {
-        var state: InstallState = InstallState.Installing
+    fun `InstallResult transitions from Installing to Success`() {
+        var state: InstallResult = InstallResult.Installing
         // Simulate successful poll completion
-        state = InstallState.Success("Gateway installed successfully")
-        assertTrue(state is InstallState.Success)
-        assertEquals("Gateway installed successfully", (state as InstallState.Success).message)
+        state = InstallResult.Success
+        assertTrue(state is InstallResult.Success)
     }
 
     @Test
-    fun `InstallState transitions from Installing to Error on timeout`() {
-        var state: InstallState = InstallState.Installing
-        state = InstallState.Error("Installation timed out")
-        assertTrue(state is InstallState.Error)
-        assertEquals("Installation timed out", (state as InstallState.Error).message)
+    fun `InstallResult transitions from Installing to Error on timeout`() {
+        var state: InstallResult = InstallResult.Installing
+        state = InstallResult.Error("Installation timed out")
+        assertTrue(state is InstallResult.Error)
+        assertEquals("Installation timed out", (state as InstallResult.Error).message)
     }
 
     @Test
-    fun `InstallState transitions from Installing to Error on failure`() {
-        var state: InstallState = InstallState.Installing
-        state = InstallState.Error("Installation failed")
-        assertTrue(state is InstallState.Error)
+    fun `InstallResult transitions from Installing to Error on failure`() {
+        var state: InstallResult = InstallResult.Installing
+        state = InstallResult.Error("Installation failed")
+        assertTrue(state is InstallResult.Error)
     }
 
     @Test
-    fun `InstallState transitions from Installing to Error on network exception`() {
-        var state: InstallState = InstallState.Installing
-        state = InstallState.Error("Failed to check installation status: Connection refused")
-        assertTrue(state is InstallState.Error)
-        assertTrue((state as InstallState.Error).message.contains("Connection refused"))
+    fun `InstallResult transitions from Installing to Error on network exception`() {
+        var state: InstallResult = InstallResult.Installing
+        state = InstallResult.Error("Failed to check installation status: Connection refused")
+        assertTrue(state is InstallResult.Error)
+        assertTrue((state as InstallResult.Error).message.contains("Connection refused"))
     }
 
     @Test
-    fun `InstallState Error to Idle via resetState flow`() {
-        var state: InstallState = InstallState.Error("timeout")
+    fun `InstallResult Error to Idle via resetState flow`() {
+        var state: InstallResult = InstallResult.Error("timeout")
         // resetState sets back to Idle
-        state = InstallState.Idle
-        assertTrue(state is InstallState.Idle)
+        state = InstallResult.Idle
+        assertTrue(state is InstallResult.Idle)
     }
 
     @Test

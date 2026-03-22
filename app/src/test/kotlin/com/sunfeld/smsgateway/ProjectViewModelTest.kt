@@ -7,7 +7,7 @@ import org.junit.Test
 import java.io.File
 
 /**
- * Unit tests for ProjectViewModel, InstallState sealed class, and
+ * Unit tests for ProjectViewModel, InstallResult sealed class, and
  * source-level verification of ViewModel/Activity integration.
  */
 class ProjectViewModelTest {
@@ -26,68 +26,55 @@ class ProjectViewModelTest {
         }
     }
 
-    // ---- InstallState sealed class tests ----
+    // ---- InstallResult sealed class tests ----
 
     @Test
-    fun `InstallState Idle is a singleton object`() {
-        val a = InstallState.Idle
-        val b = InstallState.Idle
+    fun `InstallResult Idle is a singleton object`() {
+        val a = InstallResult.Idle
+        val b = InstallResult.Idle
         assertTrue("Idle should be the same instance", a === b)
     }
 
     @Test
-    fun `InstallState Installing is a singleton object`() {
-        val a = InstallState.Installing
-        val b = InstallState.Installing
+    fun `InstallResult Installing is a singleton object`() {
+        val a = InstallResult.Installing
+        val b = InstallResult.Installing
         assertTrue("Installing should be the same instance", a === b)
     }
 
     @Test
-    fun `InstallState Success carries a message`() {
-        val state = InstallState.Success("Gateway installed successfully")
-        assertEquals("Gateway installed successfully", state.message)
+    fun `InstallResult Success is a singleton object`() {
+        val a = InstallResult.Success
+        val b = InstallResult.Success
+        assertTrue("Success should be the same instance", a === b)
     }
 
     @Test
-    fun `InstallState Error carries a message`() {
-        val error = InstallState.Error("Network timeout")
+    fun `InstallResult Error carries a message`() {
+        val error = InstallResult.Error("Network timeout")
         assertEquals("Network timeout", error.message)
     }
 
     @Test
-    fun `InstallState Error with different messages are not equal`() {
-        val error1 = InstallState.Error("Network timeout")
-        val error2 = InstallState.Error("Server returned 500")
+    fun `InstallResult Error with different messages are not equal`() {
+        val error1 = InstallResult.Error("Network timeout")
+        val error2 = InstallResult.Error("Server returned 500")
         assertNotEquals(error1, error2)
     }
 
     @Test
-    fun `InstallState Error with same message are equal`() {
-        val error1 = InstallState.Error("Network timeout")
-        val error2 = InstallState.Error("Network timeout")
+    fun `InstallResult Error with same message are equal`() {
+        val error1 = InstallResult.Error("Network timeout")
+        val error2 = InstallResult.Error("Network timeout")
         assertEquals(error1, error2)
     }
 
     @Test
-    fun `InstallState Success with same message are equal`() {
-        val a = InstallState.Success("done")
-        val b = InstallState.Success("done")
-        assertEquals(a, b)
-    }
-
-    @Test
-    fun `InstallState Success with different messages are not equal`() {
-        val a = InstallState.Success("done")
-        val b = InstallState.Success("completed")
-        assertNotEquals(a, b)
-    }
-
-    @Test
-    fun `InstallState all variants are distinct types`() {
-        val idle: InstallState = InstallState.Idle
-        val installing: InstallState = InstallState.Installing
-        val success: InstallState = InstallState.Success("ok")
-        val error: InstallState = InstallState.Error("test")
+    fun `InstallResult all variants are distinct types`() {
+        val idle: InstallResult = InstallResult.Idle
+        val installing: InstallResult = InstallResult.Installing
+        val success: InstallResult = InstallResult.Success
+        val error: InstallResult = InstallResult.Error("test")
 
         assertNotEquals(idle, installing)
         assertNotEquals(idle, success)
@@ -98,24 +85,24 @@ class ProjectViewModelTest {
     }
 
     @Test
-    fun `InstallState can be exhaustively matched with when`() {
+    fun `InstallResult can be exhaustively matched with when`() {
         val states = listOf(
-            InstallState.Idle,
-            InstallState.Installing,
-            InstallState.Success("ok"),
-            InstallState.Error("fail")
+            InstallResult.Idle,
+            InstallResult.Installing,
+            InstallResult.Success,
+            InstallResult.Error("fail")
         )
 
         val labels = states.map { state ->
             when (state) {
-                is InstallState.Idle -> "idle"
-                is InstallState.Installing -> "installing"
-                is InstallState.Success -> "success:${state.message}"
-                is InstallState.Error -> "error:${state.message}"
+                is InstallResult.Idle -> "idle"
+                is InstallResult.Installing -> "installing"
+                is InstallResult.Success -> "success"
+                is InstallResult.Error -> "error:${state.message}"
             }
         }
 
-        assertEquals(listOf("idle", "installing", "success:ok", "error:fail"), labels)
+        assertEquals(listOf("idle", "installing", "success", "error:fail"), labels)
     }
 
     // ---- ProjectViewModel source verification ----
@@ -136,20 +123,20 @@ class ProjectViewModelTest {
     }
 
     @Test
-    fun `ProjectViewModel exposes installState as LiveData`() {
+    fun `ProjectViewModel exposes installState as StateFlow`() {
         val content = File(SOURCE_DIR, "ProjectViewModel.kt").readText()
         assertTrue(
-            "installState must be exposed as LiveData<InstallState>",
-            content.contains("val installState: LiveData<InstallState>")
+            "installState must be exposed as StateFlow<InstallResult>",
+            content.contains("val installState: StateFlow<InstallResult>")
         )
     }
 
     @Test
-    fun `ProjectViewModel exposes gatewayInstalled as LiveData`() {
+    fun `ProjectViewModel exposes gatewayInstalled as StateFlow`() {
         val content = File(SOURCE_DIR, "ProjectViewModel.kt").readText()
         assertTrue(
-            "gatewayInstalled must be exposed as LiveData<Boolean>",
-            content.contains("val gatewayInstalled: LiveData<Boolean>")
+            "gatewayInstalled must be exposed as StateFlow<Boolean>",
+            content.contains("val gatewayInstalled: StateFlow<Boolean>")
         )
     }
 
@@ -184,8 +171,8 @@ class ProjectViewModelTest {
     fun `ProjectViewModel initial installState is Idle`() {
         val content = File(SOURCE_DIR, "ProjectViewModel.kt").readText()
         assertTrue(
-            "Initial state must be InstallState.Idle",
-            content.contains("MutableLiveData<InstallState>(InstallState.Idle)")
+            "Initial state must be InstallResult.Idle",
+            content.contains("MutableStateFlow<InstallResult>(InstallResult.Idle)")
         )
     }
 
@@ -194,7 +181,7 @@ class ProjectViewModelTest {
         val content = File(SOURCE_DIR, "ProjectViewModel.kt").readText()
         assertTrue(
             "Initial gatewayInstalled must be false",
-            content.contains("MutableLiveData<Boolean>(false)")
+            content.contains("MutableStateFlow(false)")
         )
     }
 
@@ -203,7 +190,7 @@ class ProjectViewModelTest {
         val content = File(SOURCE_DIR, "ProjectViewModel.kt").readText()
         assertTrue(
             "installGateway must guard against re-entry when Installing",
-            content.contains("is InstallState.Installing") && content.contains("return")
+            content.contains("is InstallResult.Installing") && content.contains("return")
         )
     }
 
@@ -216,9 +203,9 @@ class ProjectViewModelTest {
         assertTrue("installGateway must exist", installMethodStart >= 0)
         assertTrue("viewModelScope.launch must exist", launchStart >= 0)
 
-        val installingSetIndex = content.indexOf("InstallState.Installing", installMethodStart)
+        val installingSetIndex = content.indexOf("InstallResult.Installing", installMethodStart)
         assertTrue(
-            "InstallState.Installing must be set before launching coroutine",
+            "InstallResult.Installing must be set before launching coroutine",
             installingSetIndex in (installMethodStart + 1) until launchStart
         )
     }
@@ -268,7 +255,7 @@ class ProjectViewModelTest {
         val resetBody = content.substring(resetIndex, content.indexOf("}", resetIndex) + 1)
         assertTrue(
             "resetState must set state to Idle",
-            resetBody.contains("InstallState.Idle")
+            resetBody.contains("InstallResult.Idle")
         )
     }
 
@@ -326,30 +313,30 @@ class ProjectViewModelTest {
     }
 
     @Test
-    fun `ProjectDetailActivity observes installState`() {
+    fun `ProjectDetailActivity collects installState`() {
         val content = File(SOURCE_DIR, "ProjectDetailActivity.kt").readText()
         assertTrue(
-            "Activity must observe viewModel.installState",
-            content.contains("viewModel.installState.observe")
+            "Activity must collect viewModel.installState",
+            content.contains("viewModel.installState.collect")
         )
     }
 
     @Test
-    fun `ProjectDetailActivity observes gatewayInstalled`() {
+    fun `ProjectDetailActivity collects gatewayInstalled`() {
         val content = File(SOURCE_DIR, "ProjectDetailActivity.kt").readText()
         assertTrue(
-            "Activity must observe viewModel.gatewayInstalled",
-            content.contains("viewModel.gatewayInstalled.observe")
+            "Activity must collect viewModel.gatewayInstalled",
+            content.contains("viewModel.gatewayInstalled.collect")
         )
     }
 
     @Test
-    fun `ProjectDetailActivity handles all InstallState variants`() {
+    fun `ProjectDetailActivity handles all InstallResult variants`() {
         val content = File(SOURCE_DIR, "ProjectDetailActivity.kt").readText()
-        assertTrue("Must handle Idle state", content.contains("is InstallState.Idle"))
-        assertTrue("Must handle Installing state", content.contains("is InstallState.Installing"))
-        assertTrue("Must handle Success state", content.contains("is InstallState.Success"))
-        assertTrue("Must handle Error state", content.contains("is InstallState.Error"))
+        assertTrue("Must handle Idle state", content.contains("is InstallResult.Idle"))
+        assertTrue("Must handle Installing state", content.contains("is InstallResult.Installing"))
+        assertTrue("Must handle Success state", content.contains("is InstallResult.Success"))
+        assertTrue("Must handle Error state", content.contains("is InstallResult.Error"))
     }
 
     @Test
@@ -358,6 +345,140 @@ class ProjectViewModelTest {
         assertTrue(
             "Activity must call viewModel.installGateway()",
             content.contains("viewModel.installGateway()")
+        )
+    }
+
+    // ---- Loading spinner (CircularProgressIndicator) tests ----
+
+    @Test
+    fun `ProjectDetailActivity references CircularProgressIndicator`() {
+        val content = File(SOURCE_DIR, "ProjectDetailActivity.kt").readText()
+        assertTrue(
+            "Activity must import CircularProgressIndicator",
+            content.contains("import com.google.android.material.progressindicator.CircularProgressIndicator")
+        )
+    }
+
+    @Test
+    fun `ProjectDetailActivity declares progressInstalling field`() {
+        val content = File(SOURCE_DIR, "ProjectDetailActivity.kt").readText()
+        assertTrue(
+            "Activity must declare progressInstalling field",
+            content.contains("progressInstalling")
+        )
+    }
+
+    @Test
+    fun `ProjectDetailActivity shows spinner during Installing state`() {
+        val content = File(SOURCE_DIR, "ProjectDetailActivity.kt").readText()
+        assertTrue(
+            "Spinner must be made VISIBLE during Installing state",
+            content.contains("progressInstalling.visibility = View.VISIBLE")
+        )
+    }
+
+    @Test
+    fun `ProjectDetailActivity hides spinner during Idle state`() {
+        val content = File(SOURCE_DIR, "ProjectDetailActivity.kt").readText()
+        val idleBlock = content.indexOf("is InstallResult.Idle")
+        assertTrue("Must handle Idle state", idleBlock >= 0)
+        val nextBlock = content.indexOf("is InstallResult.", idleBlock + 1)
+        val idleSection = content.substring(idleBlock, nextBlock)
+        assertTrue(
+            "Spinner must be hidden (GONE) during Idle state",
+            idleSection.contains("progressInstalling.visibility = View.GONE")
+        )
+    }
+
+    @Test
+    fun `ProjectDetailActivity hides spinner on Success`() {
+        val content = File(SOURCE_DIR, "ProjectDetailActivity.kt").readText()
+        val successBlock = content.indexOf("is InstallResult.Success")
+        assertTrue("Must handle Success state", successBlock >= 0)
+        val nextBlock = content.indexOf("is InstallResult.", successBlock + 1)
+        val successSection = content.substring(successBlock, nextBlock)
+        assertTrue(
+            "Spinner must be hidden (GONE) on Success",
+            successSection.contains("progressInstalling.visibility = View.GONE")
+        )
+    }
+
+    @Test
+    fun `ProjectDetailActivity hides spinner on Error`() {
+        val content = File(SOURCE_DIR, "ProjectDetailActivity.kt").readText()
+        val errorBlock = content.indexOf("is InstallResult.Error")
+        assertTrue("Must handle Error state", errorBlock >= 0)
+        val errorSection = content.substring(errorBlock, content.indexOf("}", errorBlock + 30) + 1)
+        assertTrue(
+            "Spinner must be hidden (GONE) on Error",
+            errorSection.contains("progressInstalling.visibility = View.GONE")
+        )
+    }
+
+    @Test
+    fun `ProjectDetailActivity shows success toast`() {
+        val content = File(SOURCE_DIR, "ProjectDetailActivity.kt").readText()
+        assertTrue(
+            "Must show toast with success message",
+            content.contains("Gateway installed successfully")
+        )
+    }
+
+    @Test
+    fun `ProjectDetailActivity shows error toast with message`() {
+        val content = File(SOURCE_DIR, "ProjectDetailActivity.kt").readText()
+        assertTrue(
+            "Must show toast with error message from InstallResult.Error",
+            content.contains("state.message") && content.contains("Toast.makeText")
+        )
+    }
+
+    // ---- Layout XML verification ----
+
+    @Test
+    fun `activity_project_detail layout contains CircularProgressIndicator`() {
+        val layoutFile = File(PROJECT_ROOT, "app/src/main/res/layout/activity_project_detail.xml")
+        assertTrue("Layout file must exist", layoutFile.exists())
+        val content = layoutFile.readText()
+        assertTrue(
+            "Layout must contain CircularProgressIndicator widget",
+            content.contains("CircularProgressIndicator")
+        )
+    }
+
+    @Test
+    fun `activity_project_detail layout has progressInstalling id`() {
+        val layoutFile = File(PROJECT_ROOT, "app/src/main/res/layout/activity_project_detail.xml")
+        val content = layoutFile.readText()
+        assertTrue(
+            "Layout must define progressInstalling id",
+            content.contains("@+id/progressInstalling")
+        )
+    }
+
+    @Test
+    fun `activity_project_detail spinner starts as gone`() {
+        val layoutFile = File(PROJECT_ROOT, "app/src/main/res/layout/activity_project_detail.xml")
+        val content = layoutFile.readText()
+        val spinnerStart = content.indexOf("progressInstalling")
+        assertTrue("progressInstalling must exist in layout", spinnerStart >= 0)
+        val spinnerSection = content.substring(spinnerStart, content.indexOf("/>", spinnerStart) + 2)
+        assertTrue(
+            "Spinner must start with visibility=gone",
+            spinnerSection.contains("android:visibility=\"gone\"")
+        )
+    }
+
+    @Test
+    fun `activity_project_detail spinner is indeterminate`() {
+        val layoutFile = File(PROJECT_ROOT, "app/src/main/res/layout/activity_project_detail.xml")
+        val content = layoutFile.readText()
+        val spinnerStart = content.indexOf("progressInstalling")
+        assertTrue("progressInstalling must exist in layout", spinnerStart >= 0)
+        val spinnerSection = content.substring(spinnerStart, content.indexOf("/>", spinnerStart) + 2)
+        assertTrue(
+            "Spinner must be indeterminate",
+            spinnerSection.contains("android:indeterminate=\"true\"")
         )
     }
 }

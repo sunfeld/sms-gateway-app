@@ -5,13 +5,19 @@ import android.view.View
 import android.widget.Toast
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
+import com.google.android.material.progressindicator.CircularProgressIndicator
 import com.google.android.material.textview.MaterialTextView
+import kotlinx.coroutines.launch
 
 class ProjectDetailActivity : AppCompatActivity() {
 
     private lateinit var txtProjectTitle: MaterialTextView
     private lateinit var txtGatewayStatus: MaterialTextView
     private lateinit var btnInstallGateway: GatewayInstallButton
+    private lateinit var progressInstalling: CircularProgressIndicator
 
     private val viewModel: ProjectViewModel by viewModels()
 
@@ -34,6 +40,7 @@ class ProjectDetailActivity : AppCompatActivity() {
         txtProjectTitle = findViewById(R.id.txtProjectTitle)
         txtGatewayStatus = findViewById(R.id.txtGatewayStatus)
         btnInstallGateway = findViewById(R.id.btnInstallGateway)
+        progressInstalling = findViewById(R.id.progressInstalling)
 
         val projectName = intent.getStringExtra(EXTRA_PROJECT_NAME) ?: getString(R.string.app_name)
         val gatewayInstalled = intent.getBooleanExtra(EXTRA_GATEWAY_INSTALLED, false)
@@ -45,26 +52,37 @@ class ProjectDetailActivity : AppCompatActivity() {
             viewModel.installGateway()
         }
 
-        viewModel.installState.observe(this) { state ->
-            when (state) {
-                is InstallState.Idle -> {
-                    btnInstallGateway.state = GatewayInstallButton.State.IDLE
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                launch {
+                    viewModel.installState.collect { state ->
+                        when (state) {
+                            is InstallResult.Idle -> {
+                                btnInstallGateway.state = GatewayInstallButton.State.IDLE
+                                progressInstalling.visibility = View.GONE
+                            }
+                            is InstallResult.Installing -> {
+                                btnInstallGateway.state = GatewayInstallButton.State.INSTALLING
+                                progressInstalling.visibility = View.VISIBLE
+                            }
+                            is InstallResult.Success -> {
+                                progressInstalling.visibility = View.GONE
+                                Toast.makeText(this@ProjectDetailActivity, "Gateway installed successfully", Toast.LENGTH_SHORT).show()
+                            }
+                            is InstallResult.Error -> {
+                                btnInstallGateway.state = GatewayInstallButton.State.ERROR
+                                progressInstalling.visibility = View.GONE
+                                Toast.makeText(this@ProjectDetailActivity, state.message, Toast.LENGTH_LONG).show()
+                            }
+                        }
+                    }
                 }
-                is InstallState.Installing -> {
-                    btnInstallGateway.state = GatewayInstallButton.State.INSTALLING
-                }
-                is InstallState.Success -> {
-                    Toast.makeText(this, state.message, Toast.LENGTH_SHORT).show()
-                }
-                is InstallState.Error -> {
-                    btnInstallGateway.state = GatewayInstallButton.State.ERROR
-                    Toast.makeText(this, state.message, Toast.LENGTH_LONG).show()
+                launch {
+                    viewModel.gatewayInstalled.collect { installed ->
+                        updateGatewayUI(installed)
+                    }
                 }
             }
-        }
-
-        viewModel.gatewayInstalled.observe(this) { installed ->
-            updateGatewayUI(installed)
         }
     }
 
