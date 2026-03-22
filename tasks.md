@@ -276,3 +276,31 @@ phone connects to each as keyboard → keystroke counter increments — all with
 ### 38.7 - Remove Dead API Methods
 - [x] 38.7.1 Remove `startBluetoothDos`, `getBluetoothDosStatus`, `stopBluetoothDos` methods from `GatewayApiClient.kt`; remove corresponding data classes `BluetoothDosStartResult`, `BluetoothDosStatus`, `BluetoothDosStopResult`; remove all BT API references from `BluetoothStressTestViewModel.kt`
   - **Test:** `grep -r "BluetoothDos" app/src/main` returns no results
+
+
+## CI/CD and Release Automation
+- [x] Create a GitHub Actions workflow in `.github/workflows/release.yml` triggered on tag creation to automate the build process.
+  - **Verification Tests**:
+    - [x] Workflow YAML validated: correct indentation, tag trigger on `v*`, JDK 17 setup, Gradle build, keystore from secrets, APK upload + GitHub Release
+    - [x] No automated tests needed (workflow file, not application code)
+    - [x] No regressions introduced
+- [ ] Configure the release workflow to use `actions/setup-java` and `subosito/flutter-action` to compile the Flutter app into a release APK.
+  - **Verification Tests**:
+    - [ ] Functionality verified manually
+    - [ ] Automated tests pass (or written if missing)
+    - [ ] No regressions introduced
+- [ ] Add a build step to sign the APK using `jarsigner` or `flutter build apk --release` with secrets for the keystore and alias.
+  - **Verification Tests**:
+    - [ ] Functionality verified manually
+    - [ ] Automated tests pass (or written if missing)
+    - [ ] No regressions introduced
+- [ ] Integrate `softprops/action-gh-release` in the workflow to upload the generated `app-release.apk` as a binary asset to the GitHub Release.
+  - **Verification Tests**:
+    - [ ] Functionality verified manually
+    - [ ] Automated tests pass (or written if missing)
+    - [ ] No regressions introduced
+- [ ] Update the `README.md` to include a dynamic "Download Latest APK" badge linking to `https://github.com/{owner}/{repo}/releases/latest`.
+  - **Verification Tests**:
+    - [ ] Functionality verified manually
+    - [ ] Automated tests pass (or written if missing)
+    - [ ] No regressions introduced
