@@ -199,3 +199,41 @@ The app is **functionally complete** for its MVP scope. The debug APK is install
     - [x] Functionality verified manually
     - [x] Automated tests pass (or written if missing)
     - [x] No regressions introduced
+
+
+## Plan: It says cleartext communication is not permitted to 10.0.0.2
+- [x] : Create `res/xml/network_security_config.xml` to permit cleartext traffic for `10.0.0.2` and add `android:networkSecurityConfig` to the `<application>` tag in `AndroidManifest.xml`.
+  - **Verification Tests**:
+    - [x] Functionality verified manually
+    - [x] Automated tests pass (or written if missing)
+    - [x] No regressions introduced
+- [ ] : Define a `Config.kt` object containing `BASE_URL = "http://10.0.0.2:8080"` (or the verified public endpoint) to centralize API targeting.
+  - **Verification Tests**:
+    - [ ] Functionality verified manually
+    - [ ] Automated tests pass (or written if missing)
+    - [ ] No regressions introduced
+- [ ] : Implement `RetrofitClient.kt` using OkHttp and Retrofit with a `GatewayApiService` interface defining `POST /api/projects/{id}/install-gateway`.
+  - **Verification Tests**:
+    - [ ] Functionality verified manually
+    - [ ] Automated tests pass (or written if missing)
+    - [ ] No regressions introduced
+- [ ] : Create the `InstallResult` sealed class with `Idle`, `Installing`, `Success`, and `Error(message)` states to manage the UI lifecycle.
+  - **Verification Tests**:
+    - [ ] Functionality verified manually
+    - [ ] Automated tests pass (or written if missing)
+    - [ ] No regressions introduced
+- [ ] Documentation & Demo: Record demo screencast and update docs for ": Create the `InstallResult` sealed class with `Idle`, `Installing`, `Success..."
+  - **Verification Tests**:
+    - [ ] Functionality verified manually
+    - [ ] Automated tests pass (or written if missing)
+    - [ ] No regressions introduced
+- [ ] : Implement `ProjectViewModel.kt` using `viewModelScope` to execute the gateway installation request and expose state via `MutableStateFlow`.
+  - **Verification Tests**:
+    - [ ] Functionality verified manually
+    - [ ] Automated tests pass (or written if missing)
+    - [ ] No regressions introduced
+- [ ] : Update `MainActivity.kt` (or `ProjectDetailActivity`) to observe the installation state, updating a `MaterialButton` to show a loading spinner or success/error toasts.
+  - **Verification Tests**:
+    - [ ] Functionality verified manually
+    - [ ] Automated tests pass (or written if missing)
+    - [ ] No regressions introduced
