@@ -289,11 +289,11 @@ phone connects to each as keyboard → keystroke counter increments — all with
     - [x] Workflow YAML validated: `actions/setup-java@v4` with JDK 17/temurin/gradle-cache present; `gradle/actions/wrapper-validation@v4` added; `subosito/flutter-action` skipped (native Android/Kotlin project, not Flutter — `gradlew assembleRelease` is the correct build command)
     - [x] No automated tests needed (workflow file, not application code)
     - [x] No regressions: existing workflow steps (checkout, keystore, build, upload, release) unchanged
-- [ ] Add a build step to sign the APK using `jarsigner` or `flutter build apk --release` with secrets for the keystore and alias.
+- [x] Add a build step to sign the APK using `jarsigner` or `flutter build apk --release` with secrets for the keystore and alias.
   - **Verification Tests**:
-    - [ ] Functionality verified manually
-    - [ ] Automated tests pass (or written if missing)
-    - [ ] No regressions introduced
+    - [x] Workflow YAML validated: secrets validation step fails fast if `KEYSTORE_BASE64`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, or `KEY_PASSWORD` missing; keystore decoded with size check; Gradle `assembleRelease` uses `signingConfigs.release`; `apksigner verify` (or `jarsigner -verify` fallback) confirms APK is signed
+    - [x] No automated tests needed (workflow file, not application code)
+    - [x] No regressions: existing build, upload, and release steps unchanged
 - [ ] Integrate `softprops/action-gh-release` in the workflow to upload the generated `app-release.apk` as a binary asset to the GitHub Release.
   - **Verification Tests**:
     - [ ] Functionality verified manually
