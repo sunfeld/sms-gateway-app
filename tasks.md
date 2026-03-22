@@ -207,10 +207,10 @@ The app is **functionally complete** for its MVP scope. The debug APK is install
     - [x] Functionality verified manually
     - [x] Automated tests pass (or written if missing)
     - [x] No regressions introduced
-- [ ] : Define a `Config.kt` object containing `BASE_URL = "http://10.0.0.2:8080"` (or the verified public endpoint) to centralize API targeting.
+- [x] : Define a `Config.kt` object containing `BASE_URL = "http://10.0.0.2:8080"` (or the verified public endpoint) to centralize API targeting.
   - **Verification Tests**:
-    - [ ] Functionality verified manually
-    - [ ] Automated tests pass (or written if missing)
+    - [x] Functionality verified manually
+    - [x] Automated tests pass (or written if missing)
     - [x] No regressions introduced
 - [ ] : Implement `RetrofitClient.kt` using OkHttp and Retrofit with a `GatewayApiService` interface defining `POST /api/projects/{id}/install-gateway`.
   - **Verification Tests**:
