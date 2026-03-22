@@ -1,24 +1,15 @@
 package com.sunfeld.smsgateway
 
-import androidx.lifecycle.LiveData
-import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-
-/**
- * Represents the current state of the gateway installation process.
- */
-sealed class InstallState {
-    data object Idle : InstallState()
-    data object Installing : InstallState()
-    data class Success(val message: String) : InstallState()
-    data class Error(val message: String) : InstallState()
-}
 
 /**
  * ViewModel that manages the project detail state including
@@ -29,11 +20,11 @@ sealed class InstallState {
  */
 class ProjectViewModel : ViewModel() {
 
-    private val _installState = MutableLiveData<InstallState>(InstallState.Idle)
-    val installState: LiveData<InstallState> = _installState
+    private val _installState = MutableStateFlow<InstallResult>(InstallResult.Idle)
+    val installState: StateFlow<InstallResult> = _installState.asStateFlow()
 
-    private val _gatewayInstalled = MutableLiveData<Boolean>(false)
-    val gatewayInstalled: LiveData<Boolean> = _gatewayInstalled
+    private val _gatewayInstalled = MutableStateFlow(false)
+    val gatewayInstalled: StateFlow<Boolean> = _gatewayInstalled.asStateFlow()
 
     var apiClient: GatewayApiClient = GatewayApiClient()
 
@@ -58,9 +49,9 @@ class ProjectViewModel : ViewModel() {
      * On success with a statusUrl, polls the job status until completion.
      */
     fun installGateway() {
-        if (_installState.value is InstallState.Installing) return
+        if (_installState.value is InstallResult.Installing) return
 
-        _installState.value = InstallState.Installing
+        _installState.value = InstallResult.Installing
 
         viewModelScope.launch {
             try {
@@ -76,13 +67,13 @@ class ProjectViewModel : ViewModel() {
                         startStatusPolling()
                     }
                 } else if (result.ok) {
-                    _installState.value = InstallState.Success(result.message)
+                    _installState.value = InstallResult.Success
                     _gatewayInstalled.value = true
                 } else {
-                    _installState.value = InstallState.Error("Installation request was not accepted")
+                    _installState.value = InstallResult.Error("Installation request was not accepted")
                 }
             } catch (e: Exception) {
-                _installState.value = InstallState.Error(
+                _installState.value = InstallResult.Error(
                     e.message ?: "Failed to start installation"
                 )
             }
@@ -102,12 +93,12 @@ class ProjectViewModel : ViewModel() {
 
                 when (jobStatus.status) {
                     "completed", "success" -> {
-                        _installState.value = InstallState.Success("Gateway installed successfully")
+                        _installState.value = InstallResult.Success
                         _gatewayInstalled.value = true
                         return
                     }
                     "failed", "error" -> {
-                        _installState.value = InstallState.Error(
+                        _installState.value = InstallResult.Error(
                             jobStatus.error ?: "Installation failed"
                         )
                         return
@@ -115,14 +106,14 @@ class ProjectViewModel : ViewModel() {
                     // "queued", "building" — keep polling
                 }
             } catch (e: Exception) {
-                _installState.value = InstallState.Error(
+                _installState.value = InstallResult.Error(
                     "Failed to check installation status: ${e.message}"
                 )
                 return
             }
         }
 
-        _installState.value = InstallState.Error("Installation timed out")
+        _installState.value = InstallResult.Error("Installation timed out")
     }
 
     /**
@@ -148,8 +139,8 @@ class ProjectViewModel : ViewModel() {
 
                     if (projectStatus.gatewayActive) {
                         _gatewayInstalled.value = true
-                        if (_installState.value is InstallState.Installing) {
-                            _installState.value = InstallState.Success("Gateway is now active")
+                        if (_installState.value is InstallResult.Installing) {
+                            _installState.value = InstallResult.Success
                         }
                         return@launch
                     }
@@ -192,7 +183,7 @@ class ProjectViewModel : ViewModel() {
      * Resets install state back to Idle (e.g. after dismissing an error).
      */
     fun resetState() {
-        _installState.value = InstallState.Idle
+        _installState.value = InstallResult.Idle
     }
 
     override fun onCleared() {
