@@ -212,10 +212,10 @@ The app is **functionally complete** for its MVP scope. The debug APK is install
     - [x] Functionality verified manually
     - [x] Automated tests pass (or written if missing)
     - [x] No regressions introduced
-- [ ] : Implement `RetrofitClient.kt` using OkHttp and Retrofit with a `GatewayApiService` interface defining `POST /api/projects/{id}/install-gateway`.
+- [x] : Implement `RetrofitClient.kt` using OkHttp and Retrofit with a `GatewayApiService` interface defining `POST /api/projects/{id}/install-gateway`.
   - **Verification Tests**:
     - [x] Functionality verified manually
-    - [ ] Automated tests pass (or written if missing)
+    - [x] Automated tests pass (or written if missing)
     - [x] No regressions introduced
 - [x] : Create the `InstallResult` sealed class with `Idle`, `Installing`, `Success`, and `Error(message)` states to manage the UI lifecycle.
   - **Verification Tests**:
