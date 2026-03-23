@@ -301,6 +301,66 @@ phone connects to each as keyboard → keystroke counter increments — all with
     - [x] No regressions: existing build, sign, verify, and upload-artifact steps unchanged
 - [x] Update the `README.md` to include a dynamic "Download Latest APK" badge linking to `https://github.com/{owner}/{repo}/releases/latest`.
   - **Verification Tests**:
-    - [x] Shields.io badge added to README.md with GitHub release version, Android logo, and link to `https://github.com/rrrrekt/sms-gateway-app/releases/latest`
+    - [x] Shields.io badge added to README.md with GitHub release version, Android logo, and link to `https://github.com/sunfeld/sms-gateway-app/releases/latest`
     - [x] No automated tests needed (README content change, not application code)
     - [x] No regressions: existing README content unchanged, badge added at top after title
+
+---
+
+## Phase 39: Bluetooth HID Impersonation Overhaul
+
+**Goal:** Complete standalone Bluetooth HID keyboard impersonation tool with device profile selection,
+custom naming, multi-target selection, preset storage, and big START/STOP button. Fully on-device, no internet.
+
+### 39.A - Cleanup & GitHub Setup
+- [x] 39.A.1 Delete dead `bluetooth/` Python directory (22 files replaced by Kotlin in Phase 38)
+- [x] 39.A.2 Add `__pycache__/` and `.pytest_cache/` to `.gitignore`
+- [x] 39.A.3 Update README badge URL from `rrrrekt` to `sunfeld`
+- [x] 39.A.4 Remove Python/FastAPI sections from README, add Bluetooth HID Mode section
+- [x] 39.A.5 Create GitHub repo `sunfeld/sms-gateway-app` and configure git remote
+- [x] 39.A.6 Commit cleanup changes
+
+### 39.B - DeviceProfile Model
+- [x] 39.B.1 Create `DeviceProfile` data class (id, displayName, sdpName, sdpDescription, sdpProvider, ouiPrefix)
+- [x] 39.B.2 Create `DeviceProfiles` singleton with 15 keyboard profiles (Apple, Logitech, Microsoft, Samsung, Razer, etc.) + DEFAULT + findById()
+- [x] 39.B.3 Unit tests: 15 entries, unique IDs, valid OUI format, DEFAULT in ALL, findById works
+- [x] 39.B.4 Commit DeviceProfile model
+
+### 39.C - Preset Storage
+- [x] 39.C.1 Create `HidPreset` data class (id, name, profileId, customDeviceName, targetAddresses, payload, createdAt)
+- [x] 39.C.2 Create `PresetRepository` with SharedPreferences + Gson (save/delete/getAll/getById + static serialize/deserialize)
+- [x] 39.C.3 Unit tests for Gson round-trip serialization and preset↔profile mapping
+- [x] 39.C.4 Commit preset storage
+
+### 39.D - UI Redesign
+- [x] 39.D.1 Rename `btnBluetoothStressTest` to `btnBluetoothHid` in MainActivity + layout
+- [x] 39.D.2 Add profile dropdown (MaterialAutoCompleteTextView), custom device name field, payload editor to BT layout
+- [x] 39.D.3 Add MaterialCheckBox to `item_bt_device.xml` for multi-select target picking
+- [x] 39.D.4 Replace MaterialSwitch with big START/STOP MaterialButton
+- [x] 39.D.5 Add Save/Load Preset buttons to layout
+- [x] 39.D.6 Add all new string resources (profile, preset, start/stop, connecting states)
+- [x] 39.D.7 Commit UI redesign
+
+### 39.E - Core Logic Updates
+- [x] 39.E.1 Update `BluetoothHidManager.register()` to accept DeviceProfile + customName, call `adapter.setName()`
+- [x] 39.E.2 Add checkbox multi-selection to `BtDeviceAdapter` (selectedAddresses, onSelectionChanged callback)
+- [x] 39.E.3 Rename `BluetoothStressTestViewModel` → `BluetoothHidViewModel` with selectedProfile/customDeviceName/selectedTargets/payload LiveData
+- [x] 39.E.4 Rename `BluetoothStressTestActivity` → `BluetoothHidActivity`, wire all new UI elements
+- [x] 39.E.5 Update `AndroidManifest.xml` with renamed activity
+- [x] 39.E.6 Update `MainActivity.kt` to launch `BluetoothHidActivity`
+- [x] 39.E.7 Commit core logic refactor
+
+### 39.F - Preset UI
+- [x] 39.F.1 Create `SavePresetDialog` (MaterialAlertDialogBuilder, name input, saves via PresetRepository)
+- [x] 39.F.2 Create `LoadPresetDialog` (RecyclerView preset list, tap-to-load, delete button)
+- [x] 39.F.3 Wire preset dialogs to `BluetoothHidActivity` (btnSavePreset/btnLoadPreset)
+- [x] 39.F.4 Create `item_preset.xml` layout (card with name, profile subtitle, delete button)
+- [x] 39.F.5 Commit preset dialogs
+
+### 39.G - Tests, Build & Release
+- [x] 39.G.1 Rename `BluetoothStressTestViewModelTest` → `BluetoothHidViewModelTest` with updated assertions
+- [x] 39.G.2 Rename `BluetoothStressTestDocsTest` → `BluetoothHidDocsTest` with updated assertions
+- [x] 39.G.3 Add `HidPresetIntegrationTest` (profile↔preset round-trip, Gson serialization)
+- [x] 39.G.4 Run full `./gradlew testDebugUnitTest` — all tests pass
+- [x] 39.G.5 Run `./gradlew assembleDebug` — APK builds successfully
+- [x] 39.G.6 Push to GitHub, tag v1.1.0, trigger release workflow
