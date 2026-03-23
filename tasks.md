@@ -364,3 +364,88 @@ custom naming, multi-target selection, preset storage, and big START/STOP button
 - [x] 39.G.4 Run full `./gradlew testDebugUnitTest` — all tests pass
 - [x] 39.G.5 Run `./gradlew assembleDebug` — APK builds successfully
 - [x] 39.G.6 Push to GitHub, tag v1.1.0, trigger release workflow
+
+---
+
+## Phase 40: Fix Bluetooth HID Device Scanning Flow
+
+**Problem:** Scanning is coupled to `startAttack()` which requires targets selected first.
+No way to discover devices before starting — chicken-and-egg bug makes BT HID unusable.
+
+**Goal:** Decouple scanning from attacking. User can scan for devices independently,
+select targets from the discovered list, then START/STOP HID impersonation separately.
+
+**User story:** Configure preset → SCAN for nearby devices → select from list → START impersonation → STOP
+
+### 40.1 - Add SCAN button to layout + strings
+- [ ] 40.1.1 Add `btnScan` MaterialButton (outlined, with Bluetooth icon) between profile card and START/STOP button in `activity_bluetooth_stress_test.xml`; add `scan_btn_scan`/`scan_btn_stop_scan`/`scan_status_scanning` strings to `strings.xml`
+  - **Test:** Layout inflates without crash; `grep -c "btnScan" activity_bluetooth_stress_test.xml` returns ≥1
+
+### 40.2 - Add independent scan methods to ViewModel
+- [ ] 40.2.1 Add `startScan(context)` and `stopScan(context)` methods to `BluetoothHidViewModel` that control `BluetoothScanner` independently of `startAttack()`; add `_isScanning: MutableLiveData<Boolean>` observable; `startScan()` clears device list and starts discovery, `stopScan()` stops discovery but keeps device list
+  - **Test:** Calling `startScan()` sets `isScanning=true` and triggers `scanner.startScan()`; calling `stopScan()` sets `isScanning=false`; device list preserved after scan stops
+
+### 40.3 - Wire SCAN button in Activity + scan state UI
+- [ ] 40.3.1 Bind `btnScan` in `BluetoothHidActivity`; on click toggle between `startScan()`/`stopScan()`; observe `isScanning` LiveData to toggle button text SCAN/STOP SCAN; show device list header+RecyclerView as soon as scan starts (visibility=VISIBLE); disable SCAN during active HID impersonation; enable device checkbox selection during scan
+  - **Test:** SCAN button visible between profile card and START; clicking SCAN shows "Discovered Devices" header and RecyclerView; clicking STOP SCAN stops discovery but keeps device list visible
+
+### 40.4 - Decouple startAttack from scanner
+- [ ] 40.4.1 Modify `startAttack()` in ViewModel: remove `scanner.startScan()` call; remove `scanObserverJob` device-connect loop; instead iterate `_discoveredDevices.value` filtered by `selectedTargets` and call `hidManager.connect()` directly; remove target-empty guard from `startAttack()` (moved to Activity button handler already); `stopAttack()` no longer calls `scanner.stopScan()` — scanning remains independent
+  - **Test:** `startAttack()` does not call `scanner.startScan()`; `stopAttack()` does not call `scanner.stopScan()`; HID connects only to pre-selected targets from discovered list
+
+### 40.5 - Update tests for new scan flow
+- [ ] 40.5.1 Update `BluetoothHidViewModelTest`: add test for `startScan()` setting `isScanning=true`; add test for `stopScan()` setting `isScanning=false`; verify `startAttack()` does not invoke scanner; run `./gradlew testDebugUnitTest` — all pass
+  - **Test:** `./gradlew testDebugUnitTest` exits 0 with all tests passing
+
+### 40.6 - Build and verify
+- [ ] 40.6.1 Run `./gradlew assembleDebug` — APK builds; commit and push to GitHub
+
+---
+
+## Phase 41: Secure SMS Gateway Relay via sms.sunfeld.nl
+
+**Problem:** `Config.kt` hardcodes `http://10.0.0.2:8080` (Docker-internal IP).
+Phone runs on its own SIM outside the network — can never reach this endpoint.
+
+**Goal:** Replace Docker-internal API with a secure public WebSocket relay at `https://sms.sunfeld.nl`.
+Internal systems POST signed SMS commands → relay forwards via WebSocket → phone verifies signature + sends SMS.
+Ed25519 mutual authentication. Android KeyStore for private keys. Key exchange ceremony in-app.
+
+**Architecture:**
+```
+Internal systems → POST https://sms.sunfeld.nl/api/send → sms-relay server
+                                                            ↓ WebSocket
+                                                         Phone app (verifies Ed25519 sig, sends SMS)
+```
+
+### 41.1 - Create sms-relay Node.js server
+- [ ] 41.1.1 Create `/ws/sms-gateway-app/relay/` directory with `package.json` (Node.js, ws, tweetnacl/ed25519, express); implement Express server with: `POST /api/send` (accepts `{to, message, signature, nonce}`, verifies server Ed25519 signature, forwards to connected phone via WebSocket), `GET /api/status` (health check + phone connection status), `POST /api/register-phone` (accepts phone's public key during pairing)
+  - **Test:** `node relay/server.js` starts on port 3100; `wget -qO- http://localhost:3100/api/status` returns JSON with `connected: false`
+
+### 41.2 - Ed25519 key management on server
+- [ ] 41.2.1 Create `relay/crypto.js`: generate Ed25519 keypair (tweetnacl), sign/verify functions, nonce generation (timestamp + random), key persistence to `relay/keys/` directory; server auto-generates keypair on first start; expose `GET /api/server-pubkey` for phone to retrieve during pairing
+  - **Test:** Server starts and creates `relay/keys/server-secret.key` + `relay/keys/server-public.key`; `GET /api/server-pubkey` returns base64 public key
+
+### 41.3 - Docker + nginx for sms.sunfeld.nl
+- [ ] 41.3.1 Create `relay/Dockerfile` (Node 20 alpine) + add `sms-relay` service to `/ws/sms-gateway-app/docker-compose.yml` on port 3100; add nginx server block on mc-proxy for `sms.sunfeld.nl` → proxy to vouwai:3100 with WebSocket support; obtain SSL cert via certbot
+  - **Test:** `wget --spider https://sms.sunfeld.nl/api/status` returns 200
+
+### 41.4 - Android Ed25519 key management
+- [ ] 41.4.1 Add `tweetnacl-java` (or `lazysodium-android`) dependency to `app/build.gradle.kts`; create `CryptoManager.kt`: generate Ed25519 keypair, store private key in Android KeyStore (or EncryptedSharedPreferences), sign/verify functions, export public key as base64; key rotation: generate new pair + re-register with server
+  - **Test:** `CryptoManager.generateKeyPair()` produces 32-byte public + 64-byte secret key; `sign()` + `verify()` round-trip succeeds
+
+### 41.5 - Android WebSocket relay client
+- [ ] 41.5.1 Add OkHttp WebSocket dependency; create `RelayClient.kt`: connects to `wss://sms.sunfeld.nl/ws`, auto-reconnects with exponential backoff, receives signed SMS commands, verifies server signature, calls `SmsService.sendDirectSms()`, sends signed delivery receipt back; create `RelayService.kt` as foreground service with persistent notification showing connection status
+  - **Test:** `RelayClient` connects to relay server; receives test message and verifies signature
+
+### 41.6 - Relay UI + gateway settings screen
+- [ ] 41.6.1 Create `GatewaySettingsActivity.kt` with: connection status indicator (connected/disconnected), server URL field (default `wss://sms.sunfeld.nl/ws`), PAIR button (initiates key exchange), key fingerprint display, ROTATE KEYS button, connection log; update `Config.kt` to use `sms.sunfeld.nl`; remove hardcoded `10.0.0.2` from `network_security_config.xml`; add gateway settings button to `MainActivity`
+  - **Test:** Gateway Settings screen opens; shows "Disconnected" status; PAIR button triggers key exchange flow
+
+### 41.7 - Key exchange ceremony
+- [ ] 41.7.1 Implement pairing flow: phone generates Ed25519 keypair → phone POSTs public key to `https://sms.sunfeld.nl/api/register-phone` → server stores phone pubkey → server returns its own pubkey → phone stores server pubkey → both sides now have each other's public keys for mutual verification; display confirmation with key fingerprints on both sides
+  - **Test:** After pairing, phone has server pubkey stored; server has phone pubkey stored; signed message round-trip succeeds
+
+### 41.8 - End-to-end test + key rotation
+- [ ] 41.8.1 Test full flow: internal system POSTs signed SMS command → relay forwards via WebSocket → phone verifies + sends SMS → phone sends signed receipt → relay verifies receipt; test key rotation: generate new keypair → re-register → old messages rejected, new messages accepted
+  - **Test:** SMS sent successfully via relay; delivery receipt received by server; key rotation works without downtime

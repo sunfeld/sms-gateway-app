@@ -30,6 +30,12 @@
     <string name="no_presets">No saved presets</string>
     <string name="preset_name_hint">Preset name</string>
 
+    <!-- Scan button -->
+    <string name="scan_btn_scan">SCAN</string>
+    <string name="scan_btn_stop_scan">STOP SCAN</string>
+    <string name="scan_status_scanning">Scanning for nearby devices…</string>
+    <string name="scan_status_found">Found %1$d device(s)</string>
+
     <!-- Start/Stop button -->
     <string name="hid_btn_start">START</string>
     <string name="hid_btn_stop">STOP</string>

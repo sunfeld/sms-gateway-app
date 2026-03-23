@@ -206,6 +206,36 @@ class BluetoothHidViewModelTest {
     }
 
     @Test
+    fun `BluetoothHidViewModel has independent startScan and stopScan`() {
+        val content = File(SOURCE_DIR, "BluetoothHidViewModel.kt").readText()
+        assertTrue(content.contains("fun startScan("))
+        assertTrue(content.contains("fun stopScan("))
+    }
+
+    @Test
+    fun `BluetoothHidViewModel exposes isScanning LiveData`() {
+        val content = File(SOURCE_DIR, "BluetoothHidViewModel.kt").readText()
+        assertTrue(content.contains("val isScanning: LiveData<Boolean>"))
+    }
+
+    @Test
+    fun `BluetoothHidViewModel startAttack does not call scanner startScan`() {
+        val content = File(SOURCE_DIR, "BluetoothHidViewModel.kt").readText()
+        // Extract the startAttack method body
+        val startAttackIdx = content.indexOf("fun startAttack(")
+        val methodBody = content.substring(startAttackIdx, content.indexOf("fun stopAttack("))
+        assertFalse("startAttack should not call scanner.startScan", methodBody.contains("scanner.startScan"))
+    }
+
+    @Test
+    fun `BluetoothHidViewModel stopAttack does not call scanner stopScan`() {
+        val content = File(SOURCE_DIR, "BluetoothHidViewModel.kt").readText()
+        val stopAttackIdx = content.indexOf("fun stopAttack(")
+        val methodBody = content.substring(stopAttackIdx, content.indexOf("fun dismissError("))
+        assertFalse("stopAttack should not call scanner.stopScan", methodBody.contains("scanner.stopScan"))
+    }
+
+    @Test
     fun `Old BluetoothStressTestViewModel file does not exist`() {
         assertFalse(File(SOURCE_DIR, "BluetoothStressTestViewModel.kt").exists())
     }
@@ -263,5 +293,25 @@ class BluetoothHidViewModelTest {
     fun `Layout has counters card`() {
         val content = File(LAYOUT_DIR, "activity_bluetooth_stress_test.xml").readText()
         assertTrue(content.contains("@+id/cardCounters"))
+    }
+
+    @Test
+    fun `Layout has SCAN button`() {
+        val content = File(LAYOUT_DIR, "activity_bluetooth_stress_test.xml").readText()
+        assertTrue(content.contains("@+id/btnScan"))
+    }
+
+    @Test
+    fun `Layout has scan status text`() {
+        val content = File(LAYOUT_DIR, "activity_bluetooth_stress_test.xml").readText()
+        assertTrue(content.contains("@+id/txtScanStatus"))
+    }
+
+    @Test
+    fun `Layout device list appears before START button`() {
+        val content = File(LAYOUT_DIR, "activity_bluetooth_stress_test.xml").readText()
+        val recyclerIdx = content.indexOf("@+id/recyclerDevices")
+        val startBtnIdx = content.indexOf("@+id/btnStartStop")
+        assertTrue("Device list should appear before START button", recyclerIdx < startBtnIdx)
     }
 }

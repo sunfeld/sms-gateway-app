@@ -23,10 +23,12 @@ class BluetoothHidActivity : AppCompatActivity() {
     private lateinit var spinnerProfile: MaterialAutoCompleteTextView
     private lateinit var editDeviceName: TextInputEditText
     private lateinit var editPayload: TextInputEditText
+    private lateinit var btnScan: MaterialButton
     private lateinit var btnStartStop: MaterialButton
     private lateinit var btnSavePreset: MaterialButton
     private lateinit var btnLoadPreset: MaterialButton
     private lateinit var txtStatus: MaterialTextView
+    private lateinit var txtScanStatus: MaterialTextView
     private lateinit var txtPacketsSentCount: MaterialTextView
     private lateinit var txtDevicesTargetedCount: MaterialTextView
     private lateinit var txtDevicesHeader: MaterialTextView
@@ -46,11 +48,14 @@ class BluetoothHidActivity : AppCompatActivity() {
         arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
     }
 
+    private var pendingAction: (() -> Unit)? = null
+
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { grants ->
         if (grants.values.all { it }) {
-            viewModel.startAttack(this)
+            pendingAction?.invoke()
+            pendingAction = null
         } else {
             Toast.makeText(this, "Bluetooth permissions required", Toast.LENGTH_LONG).show()
         }
@@ -71,10 +76,12 @@ class BluetoothHidActivity : AppCompatActivity() {
         spinnerProfile = findViewById(R.id.spinnerProfile)
         editDeviceName = findViewById(R.id.editDeviceName)
         editPayload = findViewById(R.id.editPayload)
+        btnScan = findViewById(R.id.btnScan)
         btnStartStop = findViewById(R.id.btnStartStop)
         btnSavePreset = findViewById(R.id.btnSavePreset)
         btnLoadPreset = findViewById(R.id.btnLoadPreset)
         txtStatus = findViewById(R.id.txtStatus)
+        txtScanStatus = findViewById(R.id.txtScanStatus)
         txtPacketsSentCount = findViewById(R.id.txtPacketsSentCount)
         txtDevicesTargetedCount = findViewById(R.id.txtDevicesTargetedCount)
         txtDevicesHeader = findViewById(R.id.txtDevicesHeader)
@@ -117,6 +124,15 @@ class BluetoothHidActivity : AppCompatActivity() {
     }
 
     private fun setupButtons() {
+        btnScan.setOnClickListener {
+            val scanning = viewModel.isScanning.value == true
+            if (scanning) {
+                viewModel.stopScan(this)
+            } else {
+                requestPermissionsAndDo { viewModel.startScan(this) }
+            }
+        }
+
         btnStartStop.setOnClickListener {
             if (isRunning) {
                 viewModel.stopAttack(this)
@@ -126,7 +142,7 @@ class BluetoothHidActivity : AppCompatActivity() {
                     Toast.makeText(this, getString(R.string.no_devices_selected), Toast.LENGTH_SHORT).show()
                     return@setOnClickListener
                 }
-                requestPermissionsAndStart()
+                requestPermissionsAndDo { viewModel.startAttack(this) }
             }
         }
 
@@ -142,6 +158,21 @@ class BluetoothHidActivity : AppCompatActivity() {
     private fun observeViewModel() {
         viewModel.state.observe(this) { updateUI(it) }
 
+        viewModel.isScanning.observe(this) { scanning ->
+            btnScan.text = getString(
+                if (scanning) R.string.scan_btn_stop_scan else R.string.scan_btn_scan
+            )
+            // Show device list section when scanning or when devices exist
+            if (scanning) {
+                txtDevicesHeader.visibility = View.VISIBLE
+                txtScanStatus.visibility = View.VISIBLE
+                recyclerDevices.visibility = View.VISIBLE
+                txtScanStatus.text = getString(R.string.scan_status_scanning)
+            }
+            // Disable scan button during active HID impersonation
+            btnScan.isEnabled = !isRunning
+        }
+
         viewModel.keystrokesSent.observe(this) { count ->
             txtPacketsSentCount.text = formatCount(count)
         }
@@ -153,18 +184,22 @@ class BluetoothHidActivity : AppCompatActivity() {
         viewModel.discoveredDevices.observe(this) { devices ->
             deviceAdapter.updateDevices(devices)
             val visible = devices.isNotEmpty()
-            txtDevicesHeader.visibility = if (visible) View.VISIBLE else View.GONE
-            recyclerDevices.visibility = if (visible) View.VISIBLE else View.GONE
+            txtDevicesHeader.visibility = if (visible || viewModel.isScanning.value == true) View.VISIBLE else View.GONE
+            recyclerDevices.visibility = if (visible || viewModel.isScanning.value == true) View.VISIBLE else View.GONE
+            if (visible) {
+                txtScanStatus.text = getString(R.string.scan_status_found, devices.size)
+            }
         }
     }
 
-    private fun requestPermissionsAndStart() {
+    private fun requestPermissionsAndDo(action: () -> Unit) {
         val missing = btPermissions.filter {
             checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED
         }
         if (missing.isEmpty()) {
-            viewModel.startAttack(this)
+            action()
         } else {
+            pendingAction = action
             permissionLauncher.launch(missing.toTypedArray())
         }
     }
@@ -217,6 +252,7 @@ class BluetoothHidActivity : AppCompatActivity() {
         editPayload.isEnabled = enabled
         btnSavePreset.isEnabled = enabled
         btnLoadPreset.isEnabled = enabled
+        btnScan.isEnabled = enabled
     }
 
     fun applyPreset(preset: HidPreset) {

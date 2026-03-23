@@ -38,6 +38,9 @@ class BluetoothHidViewModel : ViewModel() {
     private val _keystrokesSent = MutableLiveData(0)
     val keystrokesSent: LiveData<Int> = _keystrokesSent
 
+    private val _isScanning = MutableLiveData(false)
+    val isScanning: LiveData<Boolean> = _isScanning
+
     // User-configurable fields
     val selectedProfile = MutableLiveData<DeviceProfile>(DeviceProfiles.DEFAULT)
     val customDeviceName = MutableLiveData<String>(DeviceProfiles.DEFAULT.sdpName)
@@ -51,6 +54,34 @@ class BluetoothHidViewModel : ViewModel() {
 
     private val cycleDelayMs = 5_000L
 
+    // ---- Independent scan control (decoupled from attack) ----
+
+    fun startScan(context: Context) {
+        if (_isScanning.value == true) return
+
+        _isScanning.value = true
+        scanner.startScan(context)
+
+        // Observe discovered devices and push to LiveData
+        scanObserverJob?.cancel()
+        scanObserverJob = viewModelScope.launch {
+            scanner.devices.collect { devices ->
+                _discoveredDevices.postValue(devices)
+            }
+        }
+    }
+
+    fun stopScan(context: Context) {
+        if (_isScanning.value != true) return
+
+        _isScanning.value = false
+        scanner.stopScan(context)
+        scanObserverJob?.cancel()
+        // Keep discovered devices list visible for selection
+    }
+
+    // ---- Attack control (uses already-discovered + selected devices) ----
+
     fun startAttack(context: Context) {
         if (_state.value is HidState.Scanning || _state.value is HidState.Attacking) return
 
@@ -60,6 +91,11 @@ class BluetoothHidViewModel : ViewModel() {
 
         if (targets.isEmpty()) return
 
+        // Stop scanning if active — we're switching to HID mode
+        if (_isScanning.value == true) {
+            stopScan(context)
+        }
+
         _state.value = HidState.Scanning
         _connectedCount.value = 0
         _keystrokesSent.value = 0
@@ -67,20 +103,15 @@ class BluetoothHidViewModel : ViewModel() {
         // Register HID profile with selected device profile
         hidManager?.register(context, profile, name)
 
-        // Start BT scan
-        scanner.startScan(context)
+        // Connect HID to selected targets from already-discovered devices
+        val discoveredList = _discoveredDevices.value ?: emptyList()
+        discoveredList.filter { targets.contains(it.address) }.forEach { device ->
+            hidManager?.connect(device)
+        }
 
-        // Observe discovered devices — connect HID only to selected targets
-        scanObserverJob = viewModelScope.launch {
-            scanner.devices.collect { devices ->
-                _discoveredDevices.postValue(devices)
-                devices.filter { targets.contains(it.address) }.forEach { device ->
-                    hidManager?.connect(device)
-                }
-                if (devices.any { targets.contains(it.address) } && _state.value is HidState.Scanning) {
-                    _state.postValue(HidState.Attacking(0))
-                }
-            }
+        // Transition to Attacking once we attempt connections
+        if (targets.isNotEmpty()) {
+            _state.value = HidState.Attacking(0)
         }
 
         // Observe HID connected count
@@ -118,12 +149,10 @@ class BluetoothHidViewModel : ViewModel() {
 
         _state.value = HidState.Stopping
 
-        scanObserverJob?.cancel()
         connectedObserverJob?.cancel()
         keystrokeObserverJob?.cancel()
         attackLoopJob?.cancel()
 
-        scanner.stopScan(context)
         hidManager?.disconnectAll()
         hidManager?.unregister(context)
 
@@ -140,5 +169,6 @@ class BluetoothHidViewModel : ViewModel() {
         connectedObserverJob?.cancel()
         keystrokeObserverJob?.cancel()
         attackLoopJob?.cancel()
+        _isScanning.value = false
     }
 }
