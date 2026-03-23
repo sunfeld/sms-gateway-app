@@ -472,7 +472,7 @@ Internal systems → POST https://sms.sunfeld.nl/api/send → sms-relay server
     - [ ] Functionality verified manually
     - [ ] Automated tests pass (or written if missing)
     - [ ] No regressions introduced
-- [ ] Create unit tests for `DeviceFilter` logic to ensure RSSI updates don't create duplicate entries and an integration test to verify UI population from a mocked Bluetooth stream.
+- [x] Create unit tests for `DeviceFilter` logic to ensure RSSI updates don't create duplicate entries and an integration test to verify UI population from a mocked Bluetooth stream.
   - **Verification Tests**:
     - [ ] Functionality verified manually
     - [ ] Automated tests pass (or written if missing)

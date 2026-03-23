@@ -32,8 +32,11 @@ class BluetoothDiscoveryManager {
     private val _isDiscovering = MutableStateFlow(false)
     val isDiscovering: StateFlow<Boolean> = _isDiscovering.asStateFlow()
 
+    internal val filter = DeviceFilter()
+
     private var adapter: BluetoothAdapter? = null
     private var receiverRegistered = false
+    private val devicesByAddress = mutableMapOf<String, BluetoothDevice>()
 
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -45,7 +48,8 @@ class BluetoothDiscoveryManager {
                         @Suppress("DEPRECATION")
                         intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
                     }
-                    device?.let { addDevice(it) }
+                    val rssi = intent.getShortExtra(BluetoothDevice.EXTRA_RSSI, 0)
+                    device?.let { addDevice(it, rssi) }
                 }
                 BluetoothAdapter.ACTION_DISCOVERY_FINISHED -> {
                     // Auto-restart discovery while active
@@ -57,11 +61,12 @@ class BluetoothDiscoveryManager {
         }
     }
 
-    private fun addDevice(device: BluetoothDevice) {
-        val current = _devices.value.toMutableList()
-        if (current.none { it.address == device.address }) {
-            current.add(device)
-            _devices.value = current
+    private fun addDevice(device: BluetoothDevice, rssi: Short = 0) {
+        val name = try { device.name } catch (_: SecurityException) { null }
+        val isNew = filter.addOrUpdate(device.address, name, rssi)
+        if (isNew) {
+            devicesByAddress[device.address] = device
+            _devices.value = filter.getAll().mapNotNull { devicesByAddress[it.address] }
         }
     }
 
@@ -72,14 +77,16 @@ class BluetoothDiscoveryManager {
         if (!hasRequiredPermissions(context)) return
 
         _isDiscovering.value = true
+        filter.clear()
+        devicesByAddress.clear()
         _devices.value = emptyList()
 
         if (!receiverRegistered) {
-            val filter = IntentFilter().apply {
+            val intentFilter = IntentFilter().apply {
                 addAction(BluetoothDevice.ACTION_FOUND)
                 addAction(BluetoothAdapter.ACTION_DISCOVERY_FINISHED)
             }
-            context.registerReceiver(receiver, filter)
+            context.registerReceiver(receiver, intentFilter)
             receiverRegistered = true
         }
 
