@@ -17,7 +17,7 @@ class MainActivity : AppCompatActivity(), SmsStatusListener {
     private lateinit var editMessage: TextInputEditText
     private lateinit var btnSend: MaterialButton
     private lateinit var btnProjectDetails: MaterialButton
-    private lateinit var btnBluetoothStressTest: MaterialButton
+    private lateinit var btnBluetoothHid: MaterialButton
 
     private val requiredPermissions = arrayOf(
         Manifest.permission.SEND_SMS,
@@ -51,14 +51,14 @@ class MainActivity : AppCompatActivity(), SmsStatusListener {
         editMessage = findViewById(R.id.editMessage)
         btnSend = findViewById(R.id.btnSend)
         btnProjectDetails = findViewById(R.id.btnProjectDetails)
-        btnBluetoothStressTest = findViewById(R.id.btnBluetoothStressTest)
+        btnBluetoothHid = findViewById(R.id.btnBluetoothHid)
 
         // Disable send button until permissions are confirmed
         btnSend.isEnabled = false
 
         btnSend.setOnClickListener { onSendClicked() }
         btnProjectDetails.setOnClickListener { openProjectDetails() }
-        btnBluetoothStressTest.setOnClickListener { openBluetoothStressTest() }
+        btnBluetoothHid.setOnClickListener { openBluetoothHid() }
 
         if (hasRequiredPermissions()) {
             updateSendButtonState(true)
@@ -142,8 +142,8 @@ class MainActivity : AppCompatActivity(), SmsStatusListener {
         }
     }
 
-    private fun openBluetoothStressTest() {
-        val intent = Intent(this, BluetoothStressTestActivity::class.java)
+    private fun openBluetoothHid() {
+        val intent = Intent(this, BluetoothHidActivity::class.java)
         startActivity(intent)
     }
 

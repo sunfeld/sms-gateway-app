@@ -10,6 +10,7 @@
         android:layout_height="wrap_content"
         android:padding="24dp">
 
+        <!-- Title -->
         <com.google.android.material.textview.MaterialTextView
             android:id="@+id/txtTitle"
             android:layout_width="0dp"
@@ -31,33 +32,150 @@
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toBottomOf="@id/txtTitle" />
 
-        <com.google.android.material.materialswitch.MaterialSwitch
-            android:id="@+id/switchStressTest"
+        <!-- Impersonation Profile Card -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/cardProfile"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginTop="32dp"
-            android:text="@string/bluetooth_hid_toggle"
-            android:textAppearance="?attr/textAppearanceTitleMedium"
+            android:layout_marginTop="16dp"
+            app:cardCornerRadius="12dp"
+            app:cardElevation="2dp"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@id/txtDescription" />
+            app:layout_constraintTop_toBottomOf="@id/txtDescription">
 
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="16dp">
+
+                <com.google.android.material.textview.MaterialTextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/profile_section_title"
+                    android:textAppearance="?attr/textAppearanceTitleSmall"
+                    android:layout_marginBottom="12dp" />
+
+                <!-- Profile Dropdown -->
+                <com.google.android.material.textfield.TextInputLayout
+                    android:id="@+id/profileLayout"
+                    style="@style/Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:hint="@string/select_profile_hint">
+
+                    <com.google.android.material.textfield.MaterialAutoCompleteTextView
+                        android:id="@+id/spinnerProfile"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:inputType="none" />
+
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <!-- Custom Device Name -->
+                <com.google.android.material.textfield.TextInputLayout
+                    android:id="@+id/deviceNameLayout"
+                    style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:hint="@string/device_name_hint">
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/editDeviceName"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:maxLines="1"
+                        android:inputType="text" />
+
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <!-- Payload -->
+                <com.google.android.material.textfield.TextInputLayout
+                    android:id="@+id/payloadLayout"
+                    style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:hint="@string/payload_hint">
+
+                    <com.google.android.material.textfield.TextInputEditText
+                        android:id="@+id/editPayload"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:minLines="2"
+                        android:inputType="textMultiLine"
+                        android:gravity="top|start"
+                        android:text="@string/default_payload" />
+
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <!-- Preset Buttons -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:orientation="horizontal">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnSavePreset"
+                        style="@style/Widget.Material3.Button.OutlinedButton"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginEnd="8dp"
+                        android:text="@string/save_preset"
+                        app:icon="@android:drawable/ic_menu_save" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnLoadPreset"
+                        style="@style/Widget.Material3.Button.OutlinedButton"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:layout_marginStart="8dp"
+                        android:text="@string/load_preset"
+                        app:icon="@android:drawable/ic_menu_upload" />
+
+                </LinearLayout>
+
+            </LinearLayout>
+
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- BIG START/STOP Button -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnStartStop"
+            android:layout_width="0dp"
+            android:layout_height="64dp"
+            android:layout_marginTop="24dp"
+            android:text="@string/hid_btn_start"
+            android:textAppearance="?attr/textAppearanceTitleLarge"
+            app:cornerRadius="16dp"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/cardProfile" />
+
+        <!-- Status -->
         <com.google.android.material.textview.MaterialTextView
             android:id="@+id/txtStatus"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
+            android:layout_marginTop="12dp"
             android:text="@string/attack_state_idle"
             android:textAppearance="?attr/textAppearanceBodyMedium"
+            android:gravity="center"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@id/switchStressTest" />
+            app:layout_constraintTop_toBottomOf="@id/btnStartStop" />
 
+        <!-- Counter Card -->
         <com.google.android.material.card.MaterialCardView
             android:id="@+id/cardCounters"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginTop="24dp"
+            android:layout_marginTop="16dp"
             app:cardCornerRadius="12dp"
             app:cardElevation="2dp"
             app:layout_constraintEnd_toEndOf="parent"
@@ -127,6 +245,7 @@
 
         </com.google.android.material.card.MaterialCardView>
 
+        <!-- Discovered Devices List -->
         <com.google.android.material.textview.MaterialTextView
             android:id="@+id/txtDevicesHeader"
             android:layout_width="0dp"
