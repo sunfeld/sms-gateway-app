@@ -18,6 +18,7 @@ class MainActivity : AppCompatActivity(), SmsStatusListener {
     private lateinit var btnSend: MaterialButton
     private lateinit var btnProjectDetails: MaterialButton
     private lateinit var btnBluetoothHid: MaterialButton
+    private lateinit var btnGatewaySettings: MaterialButton
 
     private val requiredPermissions = arrayOf(
         Manifest.permission.SEND_SMS,
@@ -52,6 +53,7 @@ class MainActivity : AppCompatActivity(), SmsStatusListener {
         btnSend = findViewById(R.id.btnSend)
         btnProjectDetails = findViewById(R.id.btnProjectDetails)
         btnBluetoothHid = findViewById(R.id.btnBluetoothHid)
+        btnGatewaySettings = findViewById(R.id.btnGatewaySettings)
 
         // Disable send button until permissions are confirmed
         btnSend.isEnabled = false
@@ -59,6 +61,7 @@ class MainActivity : AppCompatActivity(), SmsStatusListener {
         btnSend.setOnClickListener { onSendClicked() }
         btnProjectDetails.setOnClickListener { openProjectDetails() }
         btnBluetoothHid.setOnClickListener { openBluetoothHid() }
+        btnGatewaySettings.setOnClickListener { openGatewaySettings() }
 
         if (hasRequiredPermissions()) {
             updateSendButtonState(true)
@@ -144,6 +147,11 @@ class MainActivity : AppCompatActivity(), SmsStatusListener {
 
     private fun openBluetoothHid() {
         val intent = Intent(this, BluetoothHidActivity::class.java)
+        startActivity(intent)
+    }
+
+    private fun openGatewaySettings() {
+        val intent = Intent(this, GatewaySettingsActivity::class.java)
         startActivity(intent)
     }
 

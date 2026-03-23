@@ -79,4 +79,15 @@
         app:layout_constraintStart_toStartOf="parent"
         app:layout_constraintTop_toBottomOf="@id/btnProjectDetails" />
 
+    <com.google.android.material.button.MaterialButton
+        android:id="@+id/btnGatewaySettings"
+        style="@style/Widget.Material3.Button.TonalButton"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:text="@string/gateway_settings_button"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/btnBluetoothHid" />
+
 </androidx.constraintlayout.widget.ConstraintLayout>

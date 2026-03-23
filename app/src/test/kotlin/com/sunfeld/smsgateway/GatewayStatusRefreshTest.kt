@@ -581,11 +581,12 @@ class GatewayStatusRefreshTest {
 
     // ---- GatewayApiClient configuration tests ----
 
+    @Suppress("DEPRECATION")
     @Test
-    fun `Config BASE_URL points to gateway host`() {
+    fun `Config BASE_URL points to relay host`() {
         assertEquals(
-            "BASE_URL should target the gateway host at 10.0.0.2:8080",
-            "http://10.0.0.2:8080",
+            "BASE_URL should target the relay host at sms.sunfeld.nl",
+            "https://sms.sunfeld.nl",
             Config.BASE_URL
         )
     }

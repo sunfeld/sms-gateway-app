@@ -181,12 +181,10 @@ class RetrofitClientTest {
 
     // --- Config.BASE_URL integration ---
 
+    @Suppress("DEPRECATION")
     @Test
     fun `RetrofitClient uses Config BASE_URL`() {
-        // The RetrofitClient is built with Config.BASE_URL which should be http://10.0.0.2:8080
-        // We verify the config value is as expected
-        assertEquals("http://10.0.0.2:8080", Config.BASE_URL)
-        // RetrofitClient.gatewayApi being non-null confirms it was built successfully with this URL
+        assertEquals("https://sms.sunfeld.nl", Config.BASE_URL)
         assertNotNull(RetrofitClient.gatewayApi)
     }
 }

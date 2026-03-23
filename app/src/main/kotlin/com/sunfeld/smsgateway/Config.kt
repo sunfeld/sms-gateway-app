@@ -7,9 +7,16 @@ package com.sunfeld.smsgateway
  */
 object Config {
     /**
-     * Base URL for the Mission Control API.
-     * Points to the host machine (10.0.0.2) on the gateway port.
-     * Cleartext traffic to this host is permitted via network_security_config.xml.
+     * Base URL for the SMS relay server.
+     * Public endpoint with Ed25519 mutual authentication.
+     * WebSocket URL: wss://sms.sunfeld.nl/ws
      */
-    const val BASE_URL = "http://10.0.0.2:8080"
+    const val RELAY_BASE_URL = "https://sms.sunfeld.nl"
+    const val RELAY_WS_URL = "wss://sms.sunfeld.nl/ws"
+
+    /**
+     * @deprecated Use RELAY_BASE_URL instead. Kept for legacy API client compatibility.
+     */
+    @Deprecated("Use RELAY_BASE_URL for the public relay endpoint")
+    const val BASE_URL = "https://sms.sunfeld.nl"
 }

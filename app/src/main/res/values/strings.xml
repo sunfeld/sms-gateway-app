@@ -57,4 +57,32 @@
     <string name="discovered_devices_header">Discovered Devices</string>
     <string name="device_status_discovered">Discovered</string>
     <string name="device_status_connected">Connected</string>
+
+    <!-- Gateway Settings -->
+    <string name="gateway_settings_button">SMS Gateway</string>
+    <string name="gateway_settings_title">SMS Gateway Relay</string>
+    <string name="gateway_settings_subtitle">Secure relay for receiving SMS commands from internal systems via Ed25519 mutual authentication.</string>
+    <string name="connection_status_label">Connection</string>
+    <string name="status_disconnected">Disconnected</string>
+    <string name="status_connecting">Connecting…</string>
+    <string name="status_authenticating">Authenticating…</string>
+    <string name="status_connected">Connected</string>
+    <string name="status_error">Error: %1$s</string>
+    <string name="pairing_status_not_paired">Not paired with server</string>
+    <string name="pairing_status_paired">Paired with server</string>
+    <string name="relay_server_url_hint">Relay server URL</string>
+    <string name="default_relay_url">wss://sms.sunfeld.nl/ws</string>
+    <string name="pair_with_server">PAIR WITH SERVER</string>
+    <string name="connect_to_relay">CONNECT</string>
+    <string name="disconnect_from_relay">DISCONNECT</string>
+    <string name="key_fingerprints_label">Key Fingerprints</string>
+    <string name="phone_fingerprint">Phone: %1$s</string>
+    <string name="server_fingerprint">Server: %1$s</string>
+    <string name="no_keys">No keys generated</string>
+    <string name="rotate_keys">Rotate Keys</string>
+    <string name="connection_log_label">Connection Log</string>
+    <string name="no_log_entries">No log entries</string>
+    <string name="pairing_success">Paired successfully!</string>
+    <string name="pairing_failed">Pairing failed: %1$s</string>
+    <string name="keys_rotated">Keys rotated — re-pair required</string>
 </resources>
