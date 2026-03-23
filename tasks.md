@@ -449,3 +449,36 @@ Internal systems → POST https://sms.sunfeld.nl/api/send → sms-relay server
 ### 41.8 - End-to-end test + key rotation
 - [x] 41.8.1 Test full flow: internal system POSTs signed SMS command → relay forwards via WebSocket → phone verifies + sends SMS → phone sends signed receipt → relay verifies receipt; test key rotation: generate new keypair → re-register → old messages rejected, new messages accepted
   - **Test:** SMS sent successfully via relay; delivery receipt received by server; key rotation works without downtime
+
+
+## Testing & Deployment
+- [x] Implement dynamic permission handling for `BLUETOOTH_SCAN`, `BLUETOOTH_CONNECT`, and `ACCESS_FINE_LOCATION` with a pre-scan check utility.
+  - **Verification Tests**:
+    - [ ] Functionality verified manually
+    - [ ] Automated tests pass (or written if missing)
+    - [ ] No regressions introduced
+- [ ] Refactor `BluetoothDiscoveryManager` to use a `StateFlow<List<BluetoothDevice>>` and implement a broadcast receiver that emits new devices to the flow in real-time.
+  - **Verification Tests**:
+    - [ ] Functionality verified manually
+    - [ ] Automated tests pass (or written if missing)
+    - [ ] No regressions introduced
+- [ ] Update `DeviceListScreen` to collect the discovery `StateFlow` and implement a `LazyColumn` that reactively renders device cards with unique MAC address filtering.
+  - **Verification Tests**:
+    - [ ] Functionality verified manually
+    - [ ] Automated tests pass (or written if missing)
+    - [ ] No regressions introduced
+- [ ] Add a `ScanningIndicator` component and empty-state logic that toggles visibility based on the `isScanning` boolean state, including a "No devices found" fallback.
+  - **Verification Tests**:
+    - [ ] Functionality verified manually
+    - [ ] Automated tests pass (or written if missing)
+    - [ ] No regressions introduced
+- [ ] Create unit tests for `DeviceFilter` logic to ensure RSSI updates don't create duplicate entries and an integration test to verify UI population from a mocked Bluetooth stream.
+  - **Verification Tests**:
+    - [ ] Functionality verified manually
+    - [ ] Automated tests pass (or written if missing)
+    - [ ] No regressions introduced
+- [ ] Documentation & Demo: Record demo screencast and update docs for "Create unit tests for `DeviceFilter` logic to ensure RSSI updates don't creat..."
+  - **Verification Tests**:
+    - [ ] Functionality verified manually
+    - [ ] Automated tests pass (or written if missing)
+    - [ ] No regressions introduced

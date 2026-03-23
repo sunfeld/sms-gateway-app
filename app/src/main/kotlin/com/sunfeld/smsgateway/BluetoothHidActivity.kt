@@ -1,13 +1,9 @@
 package com.sunfeld.smsgateway
 
-import android.Manifest
-import android.content.pm.PackageManager
-import android.os.Build
 import android.os.Bundle
 import android.view.View
 import android.widget.ArrayAdapter
 import android.widget.Toast
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.widget.doAfterTextChanged
@@ -38,32 +34,13 @@ class BluetoothHidActivity : AppCompatActivity() {
     private val viewModel: BluetoothHidViewModel by viewModels()
     private var isRunning = false
 
-    private val btPermissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-        arrayOf(
-            Manifest.permission.BLUETOOTH_SCAN,
-            Manifest.permission.BLUETOOTH_CONNECT,
-            Manifest.permission.BLUETOOTH_ADVERTISE
-        )
-    } else {
-        arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
-    }
-
-    private var pendingAction: (() -> Unit)? = null
-
-    private val permissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
-    ) { grants ->
-        if (grants.values.all { it }) {
-            pendingAction?.invoke()
-            pendingAction = null
-        } else {
-            Toast.makeText(this, "Bluetooth permissions required", Toast.LENGTH_LONG).show()
-        }
-    }
+    private lateinit var btPermissionManager: BluetoothPermissionManager
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_bluetooth_stress_test)
+
+        btPermissionManager = BluetoothPermissionManager(this)
 
         bindViews()
         setupProfileDropdown()
@@ -129,7 +106,7 @@ class BluetoothHidActivity : AppCompatActivity() {
             if (scanning) {
                 viewModel.stopScan(this)
             } else {
-                requestPermissionsAndDo { viewModel.startScan(this) }
+                btPermissionManager.requestScanPermissions { viewModel.startScan(this) }
             }
         }
 
@@ -142,7 +119,7 @@ class BluetoothHidActivity : AppCompatActivity() {
                     Toast.makeText(this, getString(R.string.no_devices_selected), Toast.LENGTH_SHORT).show()
                     return@setOnClickListener
                 }
-                requestPermissionsAndDo { viewModel.startAttack(this) }
+                btPermissionManager.requestAllBluetoothPermissions { viewModel.startAttack(this) }
             }
         }
 
@@ -189,18 +166,6 @@ class BluetoothHidActivity : AppCompatActivity() {
             if (visible) {
                 txtScanStatus.text = getString(R.string.scan_status_found, devices.size)
             }
-        }
-    }
-
-    private fun requestPermissionsAndDo(action: () -> Unit) {
-        val missing = btPermissions.filter {
-            checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED
-        }
-        if (missing.isEmpty()) {
-            action()
-        } else {
-            pendingAction = action
-            permissionLauncher.launch(missing.toTypedArray())
         }
     }
 

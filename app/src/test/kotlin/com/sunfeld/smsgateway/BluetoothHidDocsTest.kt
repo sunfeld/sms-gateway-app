@@ -158,7 +158,7 @@ class BluetoothHidDocsTest {
     @Test
     fun `BluetoothHidActivity requests BT permissions at runtime`() {
         val content = File(SOURCE_DIR, "BluetoothHidActivity.kt").readText()
-        assertTrue(content.contains("BLUETOOTH_SCAN") || content.contains("BLUETOOTH_CONNECT"))
+        assertTrue(content.contains("BluetoothPermissionManager"))
     }
 
     @Test
