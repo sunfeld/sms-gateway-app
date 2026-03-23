@@ -66,6 +66,8 @@ class BluetoothHidViewModel : ViewModel() {
 
     // ---- Independent scan control (decoupled from attack) ----
 
+    private var errorObserverJob: Job? = null
+
     fun startScan(context: Context) {
         if (_isScanning.value == true) return
 
@@ -73,11 +75,32 @@ class BluetoothHidViewModel : ViewModel() {
         _isScanningFlow.value = true
         discoveryManager.startDiscovery(context)
 
+        // Check if discovery failed to start (error set by discoveryManager)
+        if (!discoveryManager.isDiscovering.value) {
+            _isScanning.value = false
+            _isScanningFlow.value = false
+            val error = discoveryManager.lastError.value
+            if (error != null) {
+                _state.value = HidState.Error(error)
+            }
+            return
+        }
+
         // Observe discovered devices and push to LiveData
         scanObserverJob?.cancel()
         scanObserverJob = viewModelScope.launch {
             discoveryManager.devices.collect { devices ->
                 _discoveredDevices.postValue(devices)
+            }
+        }
+
+        // Observe errors from discovery manager
+        errorObserverJob?.cancel()
+        errorObserverJob = viewModelScope.launch {
+            discoveryManager.lastError.collect { error ->
+                if (error != null) {
+                    _state.postValue(HidState.Error(error))
+                }
             }
         }
     }
@@ -183,6 +206,7 @@ class BluetoothHidViewModel : ViewModel() {
     override fun onCleared() {
         super.onCleared()
         scanObserverJob?.cancel()
+        errorObserverJob?.cancel()
         connectedObserverJob?.cancel()
         keystrokeObserverJob?.cancel()
         attackLoopJob?.cancel()

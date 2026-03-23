@@ -482,3 +482,37 @@ Internal systems → POST https://sms.sunfeld.nl/api/send → sms-relay server
     - [x] Functionality verified manually
     - [x] Automated tests pass (or written if missing)
     - [x] No regressions introduced
+
+---
+
+## Phase 42: Fix Bluetooth Discovery — RECEIVER_EXPORTED + BLE Dual Scan
+
+**Problem:** Device scanning found zero devices on real Android phones.
+**Root cause:** `registerReceiver()` missing `RECEIVER_EXPORTED` flag. BT stack sends
+ACTION_FOUND from a "highly privileged app" (not a system broadcast), so `RECEIVER_NOT_EXPORTED`
+blocks it. Also no location service check for API < 31.
+
+**Research:** NLM notebook "Bluetooth HID Impersonation & Device Discovery" (84 sources).
+
+### 42.1 - Fix registerReceiver with RECEIVER_EXPORTED
+- [x] 42.1.1 Add `Context.RECEIVER_EXPORTED` flag to `registerReceiver()` in `BluetoothDiscoveryManager.kt` for API 26+; this is required because Bluetooth ACTION_FOUND originates from highly privileged apps, not system broadcasts
+  - **Test:** `grep -c "RECEIVER_EXPORTED" BluetoothDiscoveryManager.kt` returns ≥1
+
+### 42.2 - Add location service check for API < 31
+- [x] 42.2.1 Check `LocationManager.isLocationEnabled` before starting discovery on API < 31; show error message if disabled
+  - **Test:** Error state set when location is disabled on API < 31
+
+### 42.3 - Add neverForLocation flag to BLUETOOTH_SCAN
+- [x] 42.3.1 Add `android:usesPermissionFlags="neverForLocation"` to `BLUETOOTH_SCAN` in AndroidManifest.xml; prevents silent failure when location permission not granted on API 31+
+  - **Test:** `grep "neverForLocation" AndroidManifest.xml` returns match
+
+### 42.4 - Add BLE scanning alongside Classic discovery
+- [x] 42.4.1 Add `BluetoothLeScanner` with `SCAN_MODE_LOW_LATENCY` in parallel with Classic `startDiscovery()`; BLE catches modern phones and peripherals that Classic misses; both feed into same `addDevice()` → `DeviceFilter` pipeline
+  - **Test:** BLE scan callback present; `grep -c "BluetoothLeScanner" BluetoothDiscoveryManager.kt` returns ≥1
+
+### 42.5 - Add comprehensive error logging
+- [x] 42.5.1 Add `Log.d/e/w` calls for: adapter null, BT off, permissions denied, location disabled, discovery start/fail, device found, BLE scan start/fail; expose `lastError: StateFlow<String?>` from `BluetoothDiscoveryManager` for UI display
+  - **Test:** `startDiscovery()` returns observable error when BT is off
+
+### 42.6 - Build and release
+- [x] 42.6.1 All tests pass; APK builds; push to GitHub; tag v1.4.0; release workflow succeeds
