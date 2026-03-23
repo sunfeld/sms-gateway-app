@@ -63,6 +63,9 @@ class MainActivity : AppCompatActivity(), SmsStatusListener {
         btnBluetoothHid.setOnClickListener { openBluetoothHid() }
         btnGatewaySettings.setOnClickListener { openGatewaySettings() }
 
+        // Auto-start SMS relay service in background
+        RelayService.start(this)
+
         if (hasRequiredPermissions()) {
             updateSendButtonState(true)
         } else {

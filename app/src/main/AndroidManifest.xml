@@ -27,6 +27,12 @@
     <!-- Location required for BT discovery on API < 31 -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
 
+    <!-- Foreground service + boot for SMS relay -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <uses-feature
         android:name="android.hardware.telephony"
         android:required="true" />
@@ -64,6 +70,22 @@
         <activity
             android:name=".GatewaySettingsActivity"
             android:exported="false" />
+
+        <!-- SMS Relay foreground service -->
+        <service
+            android:name=".RelayService"
+            android:foregroundServiceType="connectedDevice"
+            android:exported="false" />
+
+        <!-- Auto-start relay on boot / app update -->
+        <receiver
+            android:name=".BootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
 
     </application>
 

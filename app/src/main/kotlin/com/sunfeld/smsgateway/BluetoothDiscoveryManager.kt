@@ -14,6 +14,7 @@ import android.content.IntentFilter
 import android.location.LocationManager
 import android.os.Build
 import android.util.Log
+import androidx.core.content.ContextCompat
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -149,14 +150,15 @@ class BluetoothDiscoveryManager {
                 addAction(BluetoothDevice.ACTION_FOUND)
                 addAction(BluetoothAdapter.ACTION_DISCOVERY_FINISHED)
             }
-            // API 26+ (O): RECEIVER_EXPORTED required for BT intents from
-            // "highly privileged apps" (Bluetooth stack is NOT a system broadcast)
-            // Using ContextCompat for backward compatibility
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                context.registerReceiver(receiver, intentFilter, Context.RECEIVER_EXPORTED)
-            } else {
-                context.registerReceiver(receiver, intentFilter)
-            }
+            // RECEIVER_EXPORTED required for BT ACTION_FOUND — Bluetooth stack
+            // is a "highly privileged app", not a system broadcast.
+            // ContextCompat handles the API 33+ flag requirement safely on all API levels.
+            ContextCompat.registerReceiver(
+                context,
+                receiver,
+                intentFilter,
+                ContextCompat.RECEIVER_EXPORTED
+            )
             receiverRegistered = true
             Log.d(TAG, "BroadcastReceiver registered for ACTION_FOUND + DISCOVERY_FINISHED")
         }

@@ -7,6 +7,7 @@ import android.bluetooth.BluetoothHidDeviceAppSdpSettings
 import android.bluetooth.BluetoothProfile
 import android.content.Context
 import android.os.Build
+import android.util.Log
 import androidx.annotation.RequiresApi
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -19,6 +20,10 @@ import kotlinx.coroutines.launch
 
 @RequiresApi(Build.VERSION_CODES.P)
 class BluetoothHidManager {
+
+    companion object {
+        private const val TAG = "BtHidManager"
+    }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -35,10 +40,19 @@ class BluetoothHidManager {
 
     private val hidCallback = object : BluetoothHidDevice.Callback() {
         override fun onAppStatusChanged(pluggedDevice: BluetoothDevice?, registered: Boolean) {
+            Log.d(TAG, "HID app status changed: registered=$registered device=${pluggedDevice?.address}")
             this@BluetoothHidManager.registered = registered
         }
 
         override fun onConnectionStateChanged(device: BluetoothDevice, state: Int) {
+            val stateName = when (state) {
+                BluetoothProfile.STATE_CONNECTED -> "CONNECTED"
+                BluetoothProfile.STATE_DISCONNECTED -> "DISCONNECTED"
+                BluetoothProfile.STATE_CONNECTING -> "CONNECTING"
+                BluetoothProfile.STATE_DISCONNECTING -> "DISCONNECTING"
+                else -> "UNKNOWN($state)"
+            }
+            Log.d(TAG, "HID connection state: ${device.address} -> $stateName")
             val current = _connectedDevices.value.toMutableSet()
             when (state) {
                 BluetoothProfile.STATE_CONNECTED -> current.add(device)
@@ -48,6 +62,7 @@ class BluetoothHidManager {
         }
 
         override fun onGetReport(device: BluetoothDevice, type: Byte, id: Byte, bufferSize: Int) {
+            Log.d(TAG, "onGetReport from ${device.address} type=$type id=$id")
             hidDevice?.replyReport(device, type, id, ByteArray(8))
         }
     }
@@ -55,15 +70,22 @@ class BluetoothHidManager {
     private val profileListener = object : BluetoothProfile.ServiceListener {
         override fun onServiceConnected(profile: Int, proxy: BluetoothProfile) {
             if (profile == BluetoothProfile.HID_DEVICE) {
+                Log.d(TAG, "HID_DEVICE profile proxy connected")
                 hidDevice = proxy as BluetoothHidDevice
                 currentSdpSettings?.let { settings ->
-                    hidDevice?.registerApp(settings, null, null, { it.run() }, hidCallback)
+                    Log.d(TAG, "Registering HID app: ${settings.name}")
+                    try {
+                        hidDevice?.registerApp(settings, null, null, { it.run() }, hidCallback)
+                    } catch (e: SecurityException) {
+                        Log.e(TAG, "SecurityException registering HID app", e)
+                    }
                 }
             }
         }
 
         override fun onServiceDisconnected(profile: Int) {
             if (profile == BluetoothProfile.HID_DEVICE) {
+                Log.w(TAG, "HID_DEVICE profile proxy disconnected")
                 hidDevice = null
                 registered = false
             }
@@ -71,15 +93,27 @@ class BluetoothHidManager {
     }
 
     fun register(context: Context, profile: DeviceProfile, customName: String? = null) {
-        val btManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as android.bluetooth.BluetoothManager
+        Log.d(TAG, "register() profile=${profile.displayName} customName=$customName")
+        val btManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as? android.bluetooth.BluetoothManager
+        if (btManager == null) {
+            Log.e(TAG, "BluetoothManager unavailable")
+            return
+        }
         val adapter = btManager.adapter
+        if (adapter == null) {
+            Log.e(TAG, "BluetoothAdapter unavailable")
+            return
+        }
 
         // Save original name and set impersonated name
         try {
             originalAdapterName = adapter.name
             val advertisedName = customName?.takeIf { it.isNotBlank() } ?: profile.sdpName
             adapter.setName(advertisedName)
-        } catch (_: SecurityException) { }
+            Log.d(TAG, "Adapter name set to: $advertisedName (was: $originalAdapterName)")
+        } catch (e: SecurityException) {
+            Log.w(TAG, "SecurityException setting adapter name", e)
+        }
 
         // Build SDP settings from profile
         val sdpName = customName?.takeIf { it.isNotBlank() } ?: profile.sdpName
@@ -95,9 +129,21 @@ class BluetoothHidManager {
     }
 
     fun connect(device: BluetoothDevice) {
-        val hid = hidDevice ?: return
-        if (!registered) return
-        hid.connect(device)
+        val hid = hidDevice
+        if (hid == null) {
+            Log.w(TAG, "connect(${device.address}) — HID proxy not ready")
+            return
+        }
+        if (!registered) {
+            Log.w(TAG, "connect(${device.address}) — HID app not registered yet")
+            return
+        }
+        try {
+            Log.d(TAG, "Connecting HID to ${device.address}")
+            hid.connect(device)
+        } catch (e: SecurityException) {
+            Log.e(TAG, "SecurityException connecting to ${device.address}", e)
+        }
     }
 
     fun sendText(device: BluetoothDevice, text: String, delayMs: Long = 30L) {
@@ -120,8 +166,9 @@ class BluetoothHidManager {
 
     fun unregister(context: Context) {
         disconnectAll()
-        val btManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as android.bluetooth.BluetoothManager
-        val adapter = btManager.adapter
+        val btManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as? android.bluetooth.BluetoothManager
+            ?: return
+        val adapter = btManager.adapter ?: return
 
         // Restore original adapter name
         originalAdapterName?.let { name ->

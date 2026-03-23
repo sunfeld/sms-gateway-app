@@ -516,3 +516,33 @@ blocks it. Also no location service check for API < 31.
 
 ### 42.6 - Build and release
 - [x] 42.6.1 All tests pass; APK builds; push to GitHub; tag v1.4.0; release workflow succeeds
+
+---
+
+## Phase 43: BT HID Crash Fix + SMS Relay Background Service
+
+**Problem 1:** BT HID crashes on API 28-32 — `Context.RECEIVER_EXPORTED` constant doesn't exist until API 33. Using it on older APIs throws `NoSuchFieldError`.
+**Problem 2:** SMS relay only runs when GatewaySettingsActivity is open — useless for a gateway that needs to run 24/7.
+
+### 43.1 - Fix RECEIVER_EXPORTED crash
+- [x] 43.1.1 Replace `Context.RECEIVER_EXPORTED` with `ContextCompat.registerReceiver()` which handles the flag safely across all API levels
+  - **Test:** Build succeeds; no `NoSuchFieldError` on API 28-32
+
+### 43.2 - Fix BluetoothHidManager unsafe casts + add logging
+- [x] 43.2.1 Replace `as BluetoothManager` with `as? BluetoothManager ?: return` in `register()` and `unregister()`; add `Log.d/e/w` throughout HID callback, profile listener, register, connect, sendText methods
+  - **Test:** Build succeeds; `grep -c "Log.d\|Log.e\|Log.w" BluetoothHidManager.kt` returns ≥10
+
+### 43.3 - SMS Relay foreground service
+- [x] 43.3.1 Create `RelayService.kt` as a foreground service (START_STICKY) with: persistent notification showing connection status, auto-pair on first start if not paired, auto-connect WebSocket, notification channel "SMS Gateway Relay"
+  - **Test:** `grep -c "startForeground" RelayService.kt` returns ≥1; service declared in AndroidManifest
+
+### 43.4 - Boot receiver for auto-start
+- [x] 43.4.1 Create `BootReceiver.kt` listening for `ACTION_BOOT_COMPLETED` + `ACTION_MY_PACKAGE_REPLACED`; starts `RelayService` on boot; add `FOREGROUND_SERVICE`, `RECEIVE_BOOT_COMPLETED`, `POST_NOTIFICATIONS` permissions to manifest
+  - **Test:** BootReceiver declared in AndroidManifest with correct intent-filter
+
+### 43.5 - Auto-start from MainActivity
+- [x] 43.5.1 Call `RelayService.start(this)` from `MainActivity.onCreate()`; update `GatewaySettingsActivity` to control the service instead of its own RelayClient instance
+  - **Test:** RelayService.start called in MainActivity.onCreate
+
+### 43.6 - Build and release
+- [x] 43.6.1 All tests pass; APK builds; push to GitHub; tag v1.5.0; release workflow succeeds

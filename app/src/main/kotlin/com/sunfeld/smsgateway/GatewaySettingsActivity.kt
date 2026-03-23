@@ -29,7 +29,6 @@ class GatewaySettingsActivity : AppCompatActivity() {
     private lateinit var btnRotateKeys: MaterialButton
     private lateinit var txtLog: MaterialTextView
 
-    private var relayClient: RelayClient? = null
     private val httpClient = OkHttpClient()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -152,60 +151,19 @@ class GatewaySettingsActivity : AppCompatActivity() {
         }
     }
 
+    private var serviceRunning = false
+
     private fun toggleConnection() {
-        if (relayClient != null) {
-            relayClient?.stop()
-            relayClient = null
+        if (serviceRunning) {
+            RelayService.stop(this)
+            serviceRunning = false
             btnConnect.text = getString(R.string.connect_to_relay)
             txtConnectionStatus.text = getString(R.string.status_disconnected)
-            return
-        }
-
-        relayClient = RelayClient(this).also { client ->
-            // Observe connection state
-            lifecycleScope.launch {
-                client.state.collect { state ->
-                    runOnUiThread {
-                        when (state) {
-                            is RelayClient.ConnectionState.Disconnected -> {
-                                txtConnectionStatus.text = getString(R.string.status_disconnected)
-                                btnConnect.text = getString(R.string.connect_to_relay)
-                            }
-                            is RelayClient.ConnectionState.Connecting -> {
-                                txtConnectionStatus.text = getString(R.string.status_connecting)
-                                btnConnect.text = getString(R.string.disconnect_from_relay)
-                            }
-                            is RelayClient.ConnectionState.Authenticating -> {
-                                txtConnectionStatus.text = getString(R.string.status_authenticating)
-                            }
-                            is RelayClient.ConnectionState.Connected -> {
-                                txtConnectionStatus.text = getString(R.string.status_connected)
-                                btnConnect.text = getString(R.string.disconnect_from_relay)
-                            }
-                            is RelayClient.ConnectionState.Error -> {
-                                txtConnectionStatus.text = getString(R.string.status_error, state.message)
-                                btnConnect.text = getString(R.string.disconnect_from_relay)
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Observe message log
-            lifecycleScope.launch {
-                client.messageLog.collect { logs ->
-                    runOnUiThread {
-                        txtLog.text = if (logs.isEmpty()) {
-                            getString(R.string.no_log_entries)
-                        } else {
-                            logs.joinToString("\n")
-                        }
-                    }
-                }
-            }
-
-            client.start()
+        } else {
+            RelayService.start(this)
+            serviceRunning = true
             btnConnect.text = getString(R.string.disconnect_from_relay)
+            txtConnectionStatus.text = getString(R.string.status_connecting)
         }
     }
 
@@ -217,8 +175,8 @@ class GatewaySettingsActivity : AppCompatActivity() {
                 CryptoManager.rotateKeys(this)
                 updateKeyDisplay()
                 updatePairingStatus()
-                relayClient?.stop()
-                relayClient = null
+                RelayService.stop(this)
+                serviceRunning = false
                 btnConnect.text = getString(R.string.connect_to_relay)
                 txtConnectionStatus.text = getString(R.string.status_disconnected)
                 Toast.makeText(this, getString(R.string.keys_rotated), Toast.LENGTH_SHORT).show()
@@ -228,7 +186,6 @@ class GatewaySettingsActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
-        relayClient?.stop()
         super.onDestroy()
     }
 }
