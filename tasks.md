@@ -457,7 +457,7 @@ Internal systems → POST https://sms.sunfeld.nl/api/send → sms-relay server
     - [ ] Functionality verified manually
     - [ ] Automated tests pass (or written if missing)
     - [ ] No regressions introduced
-- [ ] Refactor `BluetoothDiscoveryManager` to use a `StateFlow<List<BluetoothDevice>>` and implement a broadcast receiver that emits new devices to the flow in real-time.
+- [x] Refactor `BluetoothDiscoveryManager` to use a `StateFlow<List<BluetoothDevice>>` and implement a broadcast receiver that emits new devices to the flow in real-time.
   - **Verification Tests**:
     - [ ] Functionality verified manually
     - [ ] Automated tests pass (or written if missing)
