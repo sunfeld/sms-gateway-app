@@ -6,10 +6,10 @@ import android.widget.ArrayAdapter
 import android.widget.Toast
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.core.widget.doAfterTextChanged
-import androidx.recyclerview.widget.LinearLayoutManager
-import androidx.recyclerview.widget.RecyclerView
-import android.widget.LinearLayout
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.textfield.MaterialAutoCompleteTextView
 import com.google.android.material.textfield.TextInputEditText
@@ -29,11 +29,8 @@ class BluetoothHidActivity : AppCompatActivity() {
     private lateinit var txtPacketsSentCount: MaterialTextView
     private lateinit var txtDevicesTargetedCount: MaterialTextView
     private lateinit var txtDevicesHeader: MaterialTextView
-    private lateinit var recyclerDevices: RecyclerView
-    private lateinit var scanningIndicator: LinearLayout
-    private lateinit var emptyStateNoDevices: LinearLayout
+    private lateinit var composeDeviceList: ComposeView
 
-    private val deviceAdapter = BtDeviceAdapter()
     private val viewModel: BluetoothHidViewModel by viewModels()
     private var isRunning = false
 
@@ -65,9 +62,7 @@ class BluetoothHidActivity : AppCompatActivity() {
         txtPacketsSentCount = findViewById(R.id.txtPacketsSentCount)
         txtDevicesTargetedCount = findViewById(R.id.txtDevicesTargetedCount)
         txtDevicesHeader = findViewById(R.id.txtDevicesHeader)
-        recyclerDevices = findViewById(R.id.recyclerDevices)
-        scanningIndicator = findViewById(R.id.scanningIndicator)
-        emptyStateNoDevices = findViewById(R.id.emptyStateNoDevices)
+        composeDeviceList = findViewById(R.id.composeDeviceList)
     }
 
     private fun setupProfileDropdown() {
@@ -97,11 +92,20 @@ class BluetoothHidActivity : AppCompatActivity() {
     }
 
     private fun setupDeviceList() {
-        recyclerDevices.layoutManager = LinearLayoutManager(this)
-        recyclerDevices.adapter = deviceAdapter
-
-        deviceAdapter.onSelectionChanged = { selected ->
-            viewModel.selectedTargets.value = selected
+        composeDeviceList.apply {
+            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
+            setContent {
+                MaterialTheme {
+                    DeviceListScreen(
+                        devicesFlow = viewModel.discoveredDevicesFlow,
+                        isScanningFlow = viewModel.isScanningFlow,
+                        selectedTargetsFlow = viewModel.selectedTargetsFlow,
+                        onSelectionChanged = { targets ->
+                            viewModel.updateSelectedTargets(targets)
+                        }
+                    )
+                }
+            }
         }
     }
 
@@ -144,23 +148,11 @@ class BluetoothHidActivity : AppCompatActivity() {
             btnScan.text = getString(
                 if (scanning) R.string.scan_btn_stop_scan else R.string.scan_btn_scan
             )
-            val hasDevices = (viewModel.discoveredDevices.value?.size ?: 0) > 0
             if (scanning) {
-                // Show scanning indicator, hide empty state
                 txtDevicesHeader.visibility = View.VISIBLE
                 txtScanStatus.visibility = View.VISIBLE
-                scanningIndicator.visibility = View.VISIBLE
-                emptyStateNoDevices.visibility = View.GONE
-                recyclerDevices.visibility = if (hasDevices) View.VISIBLE else View.GONE
+                composeDeviceList.visibility = View.VISIBLE
                 txtScanStatus.text = getString(R.string.scan_status_scanning)
-            } else {
-                // Scanning stopped — hide indicator, show empty state if no devices
-                scanningIndicator.visibility = View.GONE
-                if (!hasDevices) {
-                    // Only show empty state if a scan was actually attempted (header visible)
-                    val scanWasActive = txtDevicesHeader.visibility == View.VISIBLE
-                    emptyStateNoDevices.visibility = if (scanWasActive) View.VISIBLE else View.GONE
-                }
             }
             // Disable scan button during active HID impersonation
             btnScan.isEnabled = !isRunning
@@ -175,15 +167,11 @@ class BluetoothHidActivity : AppCompatActivity() {
         }
 
         viewModel.discoveredDevices.observe(this) { devices ->
-            deviceAdapter.updateDevices(devices)
             val hasDevices = devices.isNotEmpty()
             val scanning = viewModel.isScanning.value == true
             txtDevicesHeader.visibility = if (hasDevices || scanning) View.VISIBLE else View.GONE
-            recyclerDevices.visibility = if (hasDevices) View.VISIBLE else View.GONE
+            composeDeviceList.visibility = if (hasDevices || scanning) View.VISIBLE else View.GONE
             if (hasDevices) {
-                // Devices found — hide scanning indicator and empty state, show count
-                scanningIndicator.visibility = if (scanning) View.VISIBLE else View.GONE
-                emptyStateNoDevices.visibility = View.GONE
                 txtScanStatus.text = getString(R.string.scan_status_found, devices.size)
             }
         }
@@ -250,8 +238,8 @@ class BluetoothHidActivity : AppCompatActivity() {
         editDeviceName.setText(preset.customDeviceName)
         editPayload.setText(preset.payload)
 
-        // Pre-select target addresses if they're in the current device list
-        deviceAdapter.setSelectedAddresses(preset.targetAddresses.toSet())
+        // Pre-select target addresses via ViewModel StateFlow
+        viewModel.updateSelectedTargets(preset.targetAddresses.toSet())
 
         Toast.makeText(this, getString(R.string.preset_loaded), Toast.LENGTH_SHORT).show()
     }

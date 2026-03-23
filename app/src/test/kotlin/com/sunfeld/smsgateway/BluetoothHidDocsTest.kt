@@ -162,10 +162,10 @@ class BluetoothHidDocsTest {
     }
 
     @Test
-    fun `BluetoothHidActivity uses RecyclerView for device list`() {
+    fun `BluetoothHidActivity uses ComposeView for device list`() {
         val content = File(SOURCE_DIR, "BluetoothHidActivity.kt").readText()
-        assertTrue(content.contains("RecyclerView"))
-        assertTrue(content.contains("BtDeviceAdapter"))
+        assertTrue(content.contains("ComposeView"))
+        assertTrue(content.contains("DeviceListScreen"))
     }
 
     // ---- No external BT endpoints ----

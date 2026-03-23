@@ -284,9 +284,9 @@ class BluetoothHidViewModelTest {
     }
 
     @Test
-    fun `Layout has RecyclerView for discovered devices`() {
+    fun `Layout has ComposeView for discovered devices`() {
         val content = File(LAYOUT_DIR, "activity_bluetooth_stress_test.xml").readText()
-        assertTrue(content.contains("@+id/recyclerDevices"))
+        assertTrue(content.contains("@+id/composeDeviceList"))
     }
 
     @Test
@@ -310,82 +310,87 @@ class BluetoothHidViewModelTest {
     @Test
     fun `Layout device list appears before START button`() {
         val content = File(LAYOUT_DIR, "activity_bluetooth_stress_test.xml").readText()
-        val recyclerIdx = content.indexOf("@+id/recyclerDevices")
+        val composeIdx = content.indexOf("@+id/composeDeviceList")
         val startBtnIdx = content.indexOf("@+id/btnStartStop")
-        assertTrue("Device list should appear before START button", recyclerIdx < startBtnIdx)
+        assertTrue("Device list should appear before START button", composeIdx < startBtnIdx)
     }
 
-    // ---- ScanningIndicator component tests ----
+    // ---- ScanningIndicator & empty-state composable tests ----
 
     @Test
-    fun `Layout has scanningIndicator view`() {
-        val content = File(LAYOUT_DIR, "activity_bluetooth_stress_test.xml").readText()
-        assertTrue("Layout must contain scanningIndicator", content.contains("@+id/scanningIndicator"))
-    }
-
-    @Test
-    fun `Layout scanningIndicator starts hidden`() {
-        val content = File(LAYOUT_DIR, "activity_bluetooth_stress_test.xml").readText()
-        val indicatorIdx = content.indexOf("@+id/scanningIndicator")
-        val regionStart = maxOf(0, indicatorIdx - 500)
-        val region = content.substring(regionStart, indicatorIdx + 100)
-        assertTrue("scanningIndicator must start as gone", region.contains("android:visibility=\"gone\""))
+    fun `DeviceListScreen file exists`() {
+        assertTrue(File(SOURCE_DIR, "DeviceListScreen.kt").exists())
     }
 
     @Test
-    fun `Layout scanningIndicator contains a CircularProgressIndicator`() {
-        val content = File(LAYOUT_DIR, "activity_bluetooth_stress_test.xml").readText()
-        val indicatorIdx = content.indexOf("@+id/scanningIndicator")
-        val nextSectionIdx = content.indexOf("@+id/emptyStateNoDevices")
-        val section = content.substring(indicatorIdx, nextSectionIdx)
-        assertTrue("ScanningIndicator must contain CircularProgressIndicator",
+    fun `DeviceListScreen has ScanningIndicator composable`() {
+        val content = File(SOURCE_DIR, "DeviceListScreen.kt").readText()
+        assertTrue("DeviceListScreen must define ScanningIndicator composable",
+            content.contains("fun ScanningIndicator()"))
+    }
+
+    @Test
+    fun `ScanningIndicator uses CircularProgressIndicator`() {
+        val content = File(SOURCE_DIR, "DeviceListScreen.kt").readText()
+        val indicatorIdx = content.indexOf("fun ScanningIndicator()")
+        val section = content.substring(indicatorIdx)
+        assertTrue("ScanningIndicator must use CircularProgressIndicator",
             section.contains("CircularProgressIndicator"))
     }
 
     @Test
-    fun `Layout scanningIndicator contains scanning label text`() {
-        val content = File(LAYOUT_DIR, "activity_bluetooth_stress_test.xml").readText()
-        val indicatorIdx = content.indexOf("@+id/scanningIndicator")
-        val nextSectionIdx = content.indexOf("@+id/emptyStateNoDevices")
-        val section = content.substring(indicatorIdx, nextSectionIdx)
-        assertTrue("ScanningIndicator must reference scanning_indicator_label string",
-            section.contains("@string/scanning_indicator_label"))
+    fun `ScanningIndicator references scanning_indicator_label string`() {
+        val content = File(SOURCE_DIR, "DeviceListScreen.kt").readText()
+        val indicatorIdx = content.indexOf("fun ScanningIndicator()")
+        val section = content.substring(indicatorIdx)
+        assertTrue("ScanningIndicator must reference scanning_indicator_label string resource",
+            section.contains("R.string.scanning_indicator_label"))
     }
 
     @Test
-    fun `Layout has emptyStateNoDevices view`() {
-        val content = File(LAYOUT_DIR, "activity_bluetooth_stress_test.xml").readText()
-        assertTrue("Layout must contain emptyStateNoDevices", content.contains("@+id/emptyStateNoDevices"))
+    fun `DeviceListScreen has EmptyStateNoDevices composable`() {
+        val content = File(SOURCE_DIR, "DeviceListScreen.kt").readText()
+        assertTrue("DeviceListScreen must define EmptyStateNoDevices composable",
+            content.contains("fun EmptyStateNoDevices()"))
     }
 
     @Test
-    fun `Layout emptyStateNoDevices starts hidden`() {
-        val content = File(LAYOUT_DIR, "activity_bluetooth_stress_test.xml").readText()
-        val emptyIdx = content.indexOf("@+id/emptyStateNoDevices")
-        // visibility attribute is after the id on the same element
-        val regionEnd = minOf(content.length, emptyIdx + 500)
-        val region = content.substring(emptyIdx, regionEnd)
-        assertTrue("emptyStateNoDevices must start as gone", region.contains("android:visibility=\"gone\""))
+    fun `EmptyStateNoDevices references no_devices_found string`() {
+        val content = File(SOURCE_DIR, "DeviceListScreen.kt").readText()
+        val emptyIdx = content.indexOf("fun EmptyStateNoDevices()")
+        val section = content.substring(emptyIdx)
+        assertTrue("EmptyStateNoDevices must reference no_devices_found string resource",
+            section.contains("R.string.no_devices_found"))
     }
 
     @Test
-    fun `Layout emptyStateNoDevices references no_devices_found string`() {
-        val content = File(LAYOUT_DIR, "activity_bluetooth_stress_test.xml").readText()
-        val emptyIdx = content.indexOf("@+id/emptyStateNoDevices")
-        val recyclerIdx = content.indexOf("@+id/recyclerDevices")
-        val section = content.substring(emptyIdx, recyclerIdx)
-        assertTrue("Empty state must reference no_devices_found string",
-            section.contains("@string/no_devices_found"))
+    fun `DeviceListScreen shows ScanningIndicator when isScanning and no devices`() {
+        val content = File(SOURCE_DIR, "DeviceListScreen.kt").readText()
+        assertTrue("Must call ScanningIndicator when scanning and empty",
+            content.contains("isScanning && uniqueDevices.isEmpty()") &&
+            content.contains("ScanningIndicator()"))
     }
 
     @Test
-    fun `Layout scanningIndicator appears before emptyState which appears before recyclerDevices`() {
-        val content = File(LAYOUT_DIR, "activity_bluetooth_stress_test.xml").readText()
-        val indicatorIdx = content.indexOf("@+id/scanningIndicator")
-        val emptyIdx = content.indexOf("@+id/emptyStateNoDevices")
-        val recyclerIdx = content.indexOf("@+id/recyclerDevices")
-        assertTrue("scanningIndicator must appear before emptyState", indicatorIdx < emptyIdx)
-        assertTrue("emptyState must appear before recyclerDevices", emptyIdx < recyclerIdx)
+    fun `DeviceListScreen shows EmptyStateNoDevices when not scanning and no devices`() {
+        val content = File(SOURCE_DIR, "DeviceListScreen.kt").readText()
+        assertTrue("Must call EmptyStateNoDevices when not scanning and empty",
+            content.contains("!isScanning && uniqueDevices.isEmpty()") &&
+            content.contains("EmptyStateNoDevices()"))
+    }
+
+    @Test
+    fun `DeviceListScreen accepts isScanningFlow parameter`() {
+        val content = File(SOURCE_DIR, "DeviceListScreen.kt").readText()
+        assertTrue("DeviceListScreen must accept isScanningFlow parameter",
+            content.contains("isScanningFlow: StateFlow<Boolean>"))
+    }
+
+    @Test
+    fun `DeviceListScreen collects isScanning from flow`() {
+        val content = File(SOURCE_DIR, "DeviceListScreen.kt").readText()
+        assertTrue("DeviceListScreen must collect isScanning state",
+            content.contains("isScanningFlow.collectAsStateWithLifecycle()"))
     }
 
     @Test
@@ -402,33 +407,19 @@ class BluetoothHidViewModelTest {
             content.contains("name=\"no_devices_found\""))
     }
 
-    // ---- Activity wiring tests ----
-
     @Test
-    fun `Activity binds scanningIndicator view`() {
-        val content = File(SOURCE_DIR, "BluetoothHidActivity.kt").readText()
-        assertTrue("Activity must bind scanningIndicator",
-            content.contains("R.id.scanningIndicator"))
+    fun `ScanningIndicator appears before EmptyStateNoDevices in DeviceListScreen`() {
+        val content = File(SOURCE_DIR, "DeviceListScreen.kt").readText()
+        val indicatorIdx = content.indexOf("fun ScanningIndicator()")
+        val emptyIdx = content.indexOf("fun EmptyStateNoDevices()")
+        assertTrue("ScanningIndicator must be defined before EmptyStateNoDevices",
+            indicatorIdx > 0 && emptyIdx > 0 && indicatorIdx < emptyIdx)
     }
 
     @Test
-    fun `Activity binds emptyStateNoDevices view`() {
-        val content = File(SOURCE_DIR, "BluetoothHidActivity.kt").readText()
-        assertTrue("Activity must bind emptyStateNoDevices",
-            content.contains("R.id.emptyStateNoDevices"))
-    }
-
-    @Test
-    fun `Activity toggles scanningIndicator visibility based on isScanning`() {
-        val content = File(SOURCE_DIR, "BluetoothHidActivity.kt").readText()
-        assertTrue("Activity must set scanningIndicator.visibility in isScanning observer",
-            content.contains("scanningIndicator.visibility"))
-    }
-
-    @Test
-    fun `Activity toggles emptyStateNoDevices visibility`() {
-        val content = File(SOURCE_DIR, "BluetoothHidActivity.kt").readText()
-        assertTrue("Activity must set emptyStateNoDevices.visibility",
-            content.contains("emptyStateNoDevices.visibility"))
+    fun `Layout has ComposeView for device list`() {
+        val content = File(LAYOUT_DIR, "activity_bluetooth_stress_test.xml").readText()
+        assertTrue("Layout must contain composeDeviceList",
+            content.contains("@+id/composeDeviceList"))
     }
 }
