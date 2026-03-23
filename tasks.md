@@ -419,33 +419,33 @@ Internal systems → POST https://sms.sunfeld.nl/api/send → sms-relay server
 ```
 
 ### 41.1 - Create sms-relay Node.js server
-- [ ] 41.1.1 Create `/ws/sms-gateway-app/relay/` directory with `package.json` (Node.js, ws, tweetnacl/ed25519, express); implement Express server with: `POST /api/send` (accepts `{to, message, signature, nonce}`, verifies server Ed25519 signature, forwards to connected phone via WebSocket), `GET /api/status` (health check + phone connection status), `POST /api/register-phone` (accepts phone's public key during pairing)
+- [x] 41.1.1 Create `/ws/sms-gateway-app/relay/` directory with `package.json` (Node.js, ws, tweetnacl/ed25519, express); implement Express server with: `POST /api/send` (accepts `{to, message, signature, nonce}`, verifies server Ed25519 signature, forwards to connected phone via WebSocket), `GET /api/status` (health check + phone connection status), `POST /api/register-phone` (accepts phone's public key during pairing)
   - **Test:** `node relay/server.js` starts on port 3100; `wget -qO- http://localhost:3100/api/status` returns JSON with `connected: false`
 
 ### 41.2 - Ed25519 key management on server
-- [ ] 41.2.1 Create `relay/crypto.js`: generate Ed25519 keypair (tweetnacl), sign/verify functions, nonce generation (timestamp + random), key persistence to `relay/keys/` directory; server auto-generates keypair on first start; expose `GET /api/server-pubkey` for phone to retrieve during pairing
+- [x] 41.2.1 Create `relay/crypto.js`: generate Ed25519 keypair (tweetnacl), sign/verify functions, nonce generation (timestamp + random), key persistence to `relay/keys/` directory; server auto-generates keypair on first start; expose `GET /api/server-pubkey` for phone to retrieve during pairing
   - **Test:** Server starts and creates `relay/keys/server-secret.key` + `relay/keys/server-public.key`; `GET /api/server-pubkey` returns base64 public key
 
 ### 41.3 - Docker + nginx for sms.sunfeld.nl
-- [ ] 41.3.1 Create `relay/Dockerfile` (Node 20 alpine) + add `sms-relay` service to `/ws/sms-gateway-app/docker-compose.yml` on port 3100; add nginx server block on mc-proxy for `sms.sunfeld.nl` → proxy to vouwai:3100 with WebSocket support; obtain SSL cert via certbot
+- [x] 41.3.1 Create `relay/Dockerfile` (Node 20 alpine) + add `sms-relay` service to `/ws/sms-gateway-app/docker-compose.yml` on port 3100; add nginx server block on mc-proxy for `sms.sunfeld.nl` → proxy to vouwai:3100 with WebSocket support; obtain SSL cert via certbot
   - **Test:** `wget --spider https://sms.sunfeld.nl/api/status` returns 200
 
 ### 41.4 - Android Ed25519 key management
-- [ ] 41.4.1 Add `tweetnacl-java` (or `lazysodium-android`) dependency to `app/build.gradle.kts`; create `CryptoManager.kt`: generate Ed25519 keypair, store private key in Android KeyStore (or EncryptedSharedPreferences), sign/verify functions, export public key as base64; key rotation: generate new pair + re-register with server
+- [x] 41.4.1 Add `tweetnacl-java` (or `lazysodium-android`) dependency to `app/build.gradle.kts`; create `CryptoManager.kt`: generate Ed25519 keypair, store private key in Android KeyStore (or EncryptedSharedPreferences), sign/verify functions, export public key as base64; key rotation: generate new pair + re-register with server
   - **Test:** `CryptoManager.generateKeyPair()` produces 32-byte public + 64-byte secret key; `sign()` + `verify()` round-trip succeeds
 
 ### 41.5 - Android WebSocket relay client
-- [ ] 41.5.1 Add OkHttp WebSocket dependency; create `RelayClient.kt`: connects to `wss://sms.sunfeld.nl/ws`, auto-reconnects with exponential backoff, receives signed SMS commands, verifies server signature, calls `SmsService.sendDirectSms()`, sends signed delivery receipt back; create `RelayService.kt` as foreground service with persistent notification showing connection status
+- [x] 41.5.1 Add OkHttp WebSocket dependency; create `RelayClient.kt`: connects to `wss://sms.sunfeld.nl/ws`, auto-reconnects with exponential backoff, receives signed SMS commands, verifies server signature, calls `SmsService.sendDirectSms()`, sends signed delivery receipt back; create `RelayService.kt` as foreground service with persistent notification showing connection status
   - **Test:** `RelayClient` connects to relay server; receives test message and verifies signature
 
 ### 41.6 - Relay UI + gateway settings screen
-- [ ] 41.6.1 Create `GatewaySettingsActivity.kt` with: connection status indicator (connected/disconnected), server URL field (default `wss://sms.sunfeld.nl/ws`), PAIR button (initiates key exchange), key fingerprint display, ROTATE KEYS button, connection log; update `Config.kt` to use `sms.sunfeld.nl`; remove hardcoded `10.0.0.2` from `network_security_config.xml`; add gateway settings button to `MainActivity`
+- [x] 41.6.1 Create `GatewaySettingsActivity.kt` with: connection status indicator (connected/disconnected), server URL field (default `wss://sms.sunfeld.nl/ws`), PAIR button (initiates key exchange), key fingerprint display, ROTATE KEYS button, connection log; update `Config.kt` to use `sms.sunfeld.nl`; remove hardcoded `10.0.0.2` from `network_security_config.xml`; add gateway settings button to `MainActivity`
   - **Test:** Gateway Settings screen opens; shows "Disconnected" status; PAIR button triggers key exchange flow
 
 ### 41.7 - Key exchange ceremony
-- [ ] 41.7.1 Implement pairing flow: phone generates Ed25519 keypair → phone POSTs public key to `https://sms.sunfeld.nl/api/register-phone` → server stores phone pubkey → server returns its own pubkey → phone stores server pubkey → both sides now have each other's public keys for mutual verification; display confirmation with key fingerprints on both sides
+- [x] 41.7.1 Implement pairing flow: phone generates Ed25519 keypair → phone POSTs public key to `https://sms.sunfeld.nl/api/register-phone` → server stores phone pubkey → server returns its own pubkey → phone stores server pubkey → both sides now have each other's public keys for mutual verification; display confirmation with key fingerprints on both sides
   - **Test:** After pairing, phone has server pubkey stored; server has phone pubkey stored; signed message round-trip succeeds
 
 ### 41.8 - End-to-end test + key rotation
-- [ ] 41.8.1 Test full flow: internal system POSTs signed SMS command → relay forwards via WebSocket → phone verifies + sends SMS → phone sends signed receipt → relay verifies receipt; test key rotation: generate new keypair → re-register → old messages rejected, new messages accepted
+- [x] 41.8.1 Test full flow: internal system POSTs signed SMS command → relay forwards via WebSocket → phone verifies + sends SMS → phone sends signed receipt → relay verifies receipt; test key rotation: generate new keypair → re-register → old messages rejected, new messages accepted
   - **Test:** SMS sent successfully via relay; delivery receipt received by server; key rotation works without downtime
