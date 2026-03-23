@@ -11,32 +11,23 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
-sealed class AttackState {
-    data object Idle : AttackState()
-    data object Scanning : AttackState()
-    data class Attacking(val connectedCount: Int) : AttackState()
-    data object Stopping : AttackState()
-    data class Error(val message: String) : AttackState()
+sealed class HidState {
+    data object Idle : HidState()
+    data object Scanning : HidState()
+    data class Attacking(val connectedCount: Int) : HidState()
+    data object Stopping : HidState()
+    data class Error(val message: String) : HidState()
 }
 
-/**
- * Orchestrates on-device Bluetooth HID keyboard impersonation.
- *
- * Lifecycle:
- *   startAttack(context) → scans for BT devices → connects as HID keyboard to each →
- *   sends repeating keystrokes → stopAttack(context) → disconnects and stops scan.
- *
- * No network calls are made — everything runs on the phone.
- */
-class BluetoothStressTestViewModel : ViewModel() {
+class BluetoothHidViewModel : ViewModel() {
 
     internal val scanner = BluetoothScanner()
     internal val hidManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
         BluetoothHidManager()
     } else null
 
-    private val _state = MutableLiveData<AttackState>(AttackState.Idle)
-    val state: LiveData<AttackState> = _state
+    private val _state = MutableLiveData<HidState>(HidState.Idle)
+    val state: LiveData<HidState> = _state
 
     private val _discoveredDevices = MutableLiveData<List<BluetoothDevice>>(emptyList())
     val discoveredDevices: LiveData<List<BluetoothDevice>> = _discoveredDevices
@@ -47,38 +38,47 @@ class BluetoothStressTestViewModel : ViewModel() {
     private val _keystrokesSent = MutableLiveData(0)
     val keystrokesSent: LiveData<Int> = _keystrokesSent
 
+    // User-configurable fields
+    val selectedProfile = MutableLiveData<DeviceProfile>(DeviceProfiles.DEFAULT)
+    val customDeviceName = MutableLiveData<String>(DeviceProfiles.DEFAULT.sdpName)
+    val selectedTargets = MutableLiveData<Set<String>>(emptySet())
+    val payload = MutableLiveData("Hello from your keyboard!\n")
+
     private var scanObserverJob: Job? = null
     private var connectedObserverJob: Job? = null
     private var keystrokeObserverJob: Job? = null
     private var attackLoopJob: Job? = null
 
-    // Payload sent to each connected device every cycle
-    private val payload = "Hello from your keyboard!\n"
     private val cycleDelayMs = 5_000L
 
     fun startAttack(context: Context) {
-        if (_state.value is AttackState.Scanning || _state.value is AttackState.Attacking) return
+        if (_state.value is HidState.Scanning || _state.value is HidState.Attacking) return
 
-        _state.value = AttackState.Scanning
-        _discoveredDevices.value = emptyList()
+        val profile = selectedProfile.value ?: DeviceProfiles.DEFAULT
+        val name = customDeviceName.value
+        val targets = selectedTargets.value ?: emptySet()
+
+        if (targets.isEmpty()) return
+
+        _state.value = HidState.Scanning
         _connectedCount.value = 0
         _keystrokesSent.value = 0
 
-        // Register HID profile
-        hidManager?.register(context)
+        // Register HID profile with selected device profile
+        hidManager?.register(context, profile, name)
 
         // Start BT scan
         scanner.startScan(context)
 
-        // Observe discovered devices — connect HID to each one found
+        // Observe discovered devices — connect HID only to selected targets
         scanObserverJob = viewModelScope.launch {
             scanner.devices.collect { devices ->
                 _discoveredDevices.postValue(devices)
-                devices.forEach { device ->
+                devices.filter { targets.contains(it.address) }.forEach { device ->
                     hidManager?.connect(device)
                 }
-                if (devices.isNotEmpty() && _state.value is AttackState.Scanning) {
-                    _state.postValue(AttackState.Attacking(0))
+                if (devices.any { targets.contains(it.address) } && _state.value is HidState.Scanning) {
+                    _state.postValue(HidState.Attacking(0))
                 }
             }
         }
@@ -87,8 +87,8 @@ class BluetoothStressTestViewModel : ViewModel() {
         connectedObserverJob = viewModelScope.launch {
             hidManager?.connectedDevices?.collect { connected ->
                 _connectedCount.postValue(connected.size)
-                if (_state.value is AttackState.Attacking || _state.value is AttackState.Scanning) {
-                    _state.postValue(AttackState.Attacking(connected.size))
+                if (_state.value is HidState.Attacking || _state.value is HidState.Scanning) {
+                    _state.postValue(HidState.Attacking(connected.size))
                 }
             }
         }
@@ -100,22 +100,23 @@ class BluetoothStressTestViewModel : ViewModel() {
             }
         }
 
-        // Attack loop: send keystrokes to all HID-connected devices periodically
+        // Attack loop: send keystrokes to connected devices periodically
         attackLoopJob = viewModelScope.launch {
             while (true) {
                 delay(cycleDelayMs)
+                val currentPayload = payload.value ?: "Hello from your keyboard!\n"
                 val connected = hidManager?.connectedDevices?.value ?: emptySet()
                 connected.forEach { device ->
-                    hidManager?.sendText(device, payload)
+                    hidManager?.sendText(device, currentPayload)
                 }
             }
         }
     }
 
     fun stopAttack(context: Context) {
-        if (_state.value is AttackState.Idle || _state.value is AttackState.Stopping) return
+        if (_state.value is HidState.Idle || _state.value is HidState.Stopping) return
 
-        _state.value = AttackState.Stopping
+        _state.value = HidState.Stopping
 
         scanObserverJob?.cancel()
         connectedObserverJob?.cancel()
@@ -126,11 +127,11 @@ class BluetoothStressTestViewModel : ViewModel() {
         hidManager?.disconnectAll()
         hidManager?.unregister(context)
 
-        _state.value = AttackState.Idle
+        _state.value = HidState.Idle
     }
 
     fun dismissError() {
-        _state.value = AttackState.Idle
+        _state.value = HidState.Idle
     }
 
     override fun onCleared() {

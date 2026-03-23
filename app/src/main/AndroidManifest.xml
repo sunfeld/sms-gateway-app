@@ -57,7 +57,7 @@
             android:exported="false" />
 
         <activity
-            android:name=".BluetoothStressTestActivity"
+            android:name=".BluetoothHidActivity"
             android:exported="false" />
 
     </application>
