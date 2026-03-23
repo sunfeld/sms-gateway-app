@@ -74,5 +74,9 @@ keystore.properties
 # Google Services (if used)
 google-services.json
 
+# Python cache
+__pycache__/
+.pytest_cache/
+
 # Gradle wrapper jar (optionally check in)
 # gradle/wrapper/gradle-wrapper.jar
