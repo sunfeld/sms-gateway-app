@@ -378,27 +378,27 @@ select targets from the discovered list, then START/STOP HID impersonation separ
 **User story:** Configure preset → SCAN for nearby devices → select from list → START impersonation → STOP
 
 ### 40.1 - Add SCAN button to layout + strings
-- [ ] 40.1.1 Add `btnScan` MaterialButton (outlined, with Bluetooth icon) between profile card and START/STOP button in `activity_bluetooth_stress_test.xml`; add `scan_btn_scan`/`scan_btn_stop_scan`/`scan_status_scanning` strings to `strings.xml`
+- [x] 40.1.1 Add `btnScan` MaterialButton (outlined, with Bluetooth icon) between profile card and START/STOP button in `activity_bluetooth_stress_test.xml`; add `scan_btn_scan`/`scan_btn_stop_scan`/`scan_status_scanning` strings to `strings.xml`
   - **Test:** Layout inflates without crash; `grep -c "btnScan" activity_bluetooth_stress_test.xml` returns ≥1
 
 ### 40.2 - Add independent scan methods to ViewModel
-- [ ] 40.2.1 Add `startScan(context)` and `stopScan(context)` methods to `BluetoothHidViewModel` that control `BluetoothScanner` independently of `startAttack()`; add `_isScanning: MutableLiveData<Boolean>` observable; `startScan()` clears device list and starts discovery, `stopScan()` stops discovery but keeps device list
+- [x] 40.2.1 Add `startScan(context)` and `stopScan(context)` methods to `BluetoothHidViewModel` that control `BluetoothScanner` independently of `startAttack()`; add `_isScanning: MutableLiveData<Boolean>` observable; `startScan()` clears device list and starts discovery, `stopScan()` stops discovery but keeps device list
   - **Test:** Calling `startScan()` sets `isScanning=true` and triggers `scanner.startScan()`; calling `stopScan()` sets `isScanning=false`; device list preserved after scan stops
 
 ### 40.3 - Wire SCAN button in Activity + scan state UI
-- [ ] 40.3.1 Bind `btnScan` in `BluetoothHidActivity`; on click toggle between `startScan()`/`stopScan()`; observe `isScanning` LiveData to toggle button text SCAN/STOP SCAN; show device list header+RecyclerView as soon as scan starts (visibility=VISIBLE); disable SCAN during active HID impersonation; enable device checkbox selection during scan
+- [x] 40.3.1 Bind `btnScan` in `BluetoothHidActivity`; on click toggle between `startScan()`/`stopScan()`; observe `isScanning` LiveData to toggle button text SCAN/STOP SCAN; show device list header+RecyclerView as soon as scan starts (visibility=VISIBLE); disable SCAN during active HID impersonation; enable device checkbox selection during scan
   - **Test:** SCAN button visible between profile card and START; clicking SCAN shows "Discovered Devices" header and RecyclerView; clicking STOP SCAN stops discovery but keeps device list visible
 
 ### 40.4 - Decouple startAttack from scanner
-- [ ] 40.4.1 Modify `startAttack()` in ViewModel: remove `scanner.startScan()` call; remove `scanObserverJob` device-connect loop; instead iterate `_discoveredDevices.value` filtered by `selectedTargets` and call `hidManager.connect()` directly; remove target-empty guard from `startAttack()` (moved to Activity button handler already); `stopAttack()` no longer calls `scanner.stopScan()` — scanning remains independent
+- [x] 40.4.1 Modify `startAttack()` in ViewModel: remove `scanner.startScan()` call; remove `scanObserverJob` device-connect loop; instead iterate `_discoveredDevices.value` filtered by `selectedTargets` and call `hidManager.connect()` directly; remove target-empty guard from `startAttack()` (moved to Activity button handler already); `stopAttack()` no longer calls `scanner.stopScan()` — scanning remains independent
   - **Test:** `startAttack()` does not call `scanner.startScan()`; `stopAttack()` does not call `scanner.stopScan()`; HID connects only to pre-selected targets from discovered list
 
 ### 40.5 - Update tests for new scan flow
-- [ ] 40.5.1 Update `BluetoothHidViewModelTest`: add test for `startScan()` setting `isScanning=true`; add test for `stopScan()` setting `isScanning=false`; verify `startAttack()` does not invoke scanner; run `./gradlew testDebugUnitTest` — all pass
+- [x] 40.5.1 Update `BluetoothHidViewModelTest`: add test for `startScan()` setting `isScanning=true`; add test for `stopScan()` setting `isScanning=false`; verify `startAttack()` does not invoke scanner; run `./gradlew testDebugUnitTest` — all pass
   - **Test:** `./gradlew testDebugUnitTest` exits 0 with all tests passing
 
 ### 40.6 - Build and verify
-- [ ] 40.6.1 Run `./gradlew assembleDebug` — APK builds; commit and push to GitHub
+- [x] 40.6.1 Run `./gradlew assembleDebug` — APK builds; commit and push to GitHub
 
 ---
 

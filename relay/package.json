@@ -1,0 +1,17 @@
+{
+  "name": "sms-relay",
+  "version": "1.0.0",
+  "description": "Secure SMS gateway relay with Ed25519 mutual authentication",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "tweetnacl": "^1.0.3",
+    "tweetnacl-util": "^0.15.1",
+    "ws": "^8.18.0",
+    "uuid": "^10.0.0"
+  }
+}

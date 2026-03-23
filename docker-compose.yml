@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  sms-relay:
+    build:
+      context: ./relay
+      dockerfile: Dockerfile
+    container_name: sms-relay
+    restart: unless-stopped
+    ports:
+      - "0.0.0.0:3100:3100"
+    volumes:
+      - ./relay/keys:/app/keys
+    environment:
+      - PORT=3100
+      - SMS_RELAY_API_KEY=${SMS_RELAY_API_KEY:-}
