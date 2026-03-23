@@ -460,7 +460,7 @@ Internal systems → POST https://sms.sunfeld.nl/api/send → sms-relay server
 - [x] Refactor `BluetoothDiscoveryManager` to use a `StateFlow<List<BluetoothDevice>>` and implement a broadcast receiver that emits new devices to the flow in real-time.
   - **Verification Tests**:
     - [x] Functionality verified manually
-    - [ ] Automated tests pass (or written if missing)
+    - [x] Automated tests pass (or written if missing)
     - [x] No regressions introduced
 - [x] Update `DeviceListScreen` to collect the discovery `StateFlow` and implement a `LazyColumn` that reactively renders device cards with unique MAC address filtering.
   - **Verification Tests**:
