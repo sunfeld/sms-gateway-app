@@ -454,7 +454,7 @@ Internal systems → POST https://sms.sunfeld.nl/api/send → sms-relay server
 ## Testing & Deployment
 - [x] Implement dynamic permission handling for `BLUETOOTH_SCAN`, `BLUETOOTH_CONNECT`, and `ACCESS_FINE_LOCATION` with a pre-scan check utility.
   - **Verification Tests**:
-    - [ ] Functionality verified manually
+    - [x] Functionality verified manually
     - [ ] Automated tests pass (or written if missing)
     - [ ] No regressions introduced
 - [x] Refactor `BluetoothDiscoveryManager` to use a `StateFlow<List<BluetoothDevice>>` and implement a broadcast receiver that emits new devices to the flow in real-time.
