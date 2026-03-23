@@ -467,7 +467,7 @@ Internal systems → POST https://sms.sunfeld.nl/api/send → sms-relay server
     - [ ] Functionality verified manually
     - [ ] Automated tests pass (or written if missing)
     - [ ] No regressions introduced
-- [ ] Add a `ScanningIndicator` component and empty-state logic that toggles visibility based on the `isScanning` boolean state, including a "No devices found" fallback.
+- [x] Add a `ScanningIndicator` component and empty-state logic that toggles visibility based on the `isScanning` boolean state, including a "No devices found" fallback.
   - **Verification Tests**:
     - [ ] Functionality verified manually
     - [ ] Automated tests pass (or written if missing)
