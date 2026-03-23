@@ -13,23 +13,24 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 /**
- * Discovers nearby Bluetooth Classic devices via [BluetoothAdapter.startDiscovery].
+ * Manages Bluetooth Classic device discovery via [BluetoothAdapter.startDiscovery].
  *
- * Starts a scan, collects all [BluetoothDevice] objects seen during the 12-second
- * discovery window, and auto-restarts while [isScanning] is true.
+ * Registers a [BroadcastReceiver] that listens for [BluetoothDevice.ACTION_FOUND] events
+ * and emits each newly discovered device into a [StateFlow] in real-time, de-duplicating
+ * by MAC address. Auto-restarts the 12-second discovery window while [isDiscovering] is true.
  *
  * Usage:
- *   scanner.startScan(context)
- *   scanner.devices.collect { list -> ... }
- *   scanner.stopScan(context)
+ *   discoveryManager.startDiscovery(context)
+ *   discoveryManager.devices.collect { list -> ... }
+ *   discoveryManager.stopDiscovery(context)
  */
-class BluetoothScanner {
+class BluetoothDiscoveryManager {
 
     private val _devices = MutableStateFlow<List<BluetoothDevice>>(emptyList())
     val devices: StateFlow<List<BluetoothDevice>> = _devices.asStateFlow()
 
-    private val _isActive = MutableStateFlow(false)
-    val isActive: StateFlow<Boolean> = _isActive.asStateFlow()
+    private val _isDiscovering = MutableStateFlow(false)
+    val isDiscovering: StateFlow<Boolean> = _isDiscovering.asStateFlow()
 
     private var adapter: BluetoothAdapter? = null
     private var receiverRegistered = false
@@ -47,8 +48,8 @@ class BluetoothScanner {
                     device?.let { addDevice(it) }
                 }
                 BluetoothAdapter.ACTION_DISCOVERY_FINISHED -> {
-                    // Auto-restart scan while active
-                    if (_isActive.value) {
+                    // Auto-restart discovery while active
+                    if (_isDiscovering.value) {
                         adapter?.startDiscovery()
                     }
                 }
@@ -64,13 +65,13 @@ class BluetoothScanner {
         }
     }
 
-    fun startScan(context: Context) {
+    fun startDiscovery(context: Context) {
         val btManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
         adapter = btManager?.adapter ?: return
 
         if (!hasRequiredPermissions(context)) return
 
-        _isActive.value = true
+        _isDiscovering.value = true
         _devices.value = emptyList()
 
         if (!receiverRegistered) {
@@ -86,8 +87,8 @@ class BluetoothScanner {
         adapter?.startDiscovery()
     }
 
-    fun stopScan(context: Context) {
-        _isActive.value = false
+    fun stopDiscovery(context: Context) {
+        _isDiscovering.value = false
         adapter?.cancelDiscovery()
 
         if (receiverRegistered) {

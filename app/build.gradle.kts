@@ -53,6 +53,14 @@ android {
     kotlinOptions {
         jvmTarget = "17"
     }
+
+    buildFeatures {
+        compose = true
+    }
+
+    composeOptions {
+        kotlinCompilerExtensionVersion = "1.5.10"
+    }
 }
 
 dependencies {
@@ -71,6 +79,16 @@ dependencies {
     implementation("com.squareup.retrofit2:converter-gson:2.9.0")
     implementation("net.i2p.crypto:eddsa:0.3.0")
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
+
+    // Jetpack Compose
+    val composeBom = platform("androidx.compose:compose-bom:2024.02.00")
+    implementation(composeBom)
+    implementation("androidx.compose.ui:ui")
+    implementation("androidx.compose.material3:material3")
+    implementation("androidx.compose.ui:ui-tooling-preview")
+    implementation("androidx.activity:activity-compose:1.8.2")
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.7.0")
+    debugImplementation("androidx.compose.ui:ui-tooling")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")

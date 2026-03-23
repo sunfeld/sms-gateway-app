@@ -9,6 +9,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.widget.doAfterTextChanged
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import android.widget.LinearLayout
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.textfield.MaterialAutoCompleteTextView
 import com.google.android.material.textfield.TextInputEditText
@@ -29,6 +30,8 @@ class BluetoothHidActivity : AppCompatActivity() {
     private lateinit var txtDevicesTargetedCount: MaterialTextView
     private lateinit var txtDevicesHeader: MaterialTextView
     private lateinit var recyclerDevices: RecyclerView
+    private lateinit var scanningIndicator: LinearLayout
+    private lateinit var emptyStateNoDevices: LinearLayout
 
     private val deviceAdapter = BtDeviceAdapter()
     private val viewModel: BluetoothHidViewModel by viewModels()
@@ -63,6 +66,8 @@ class BluetoothHidActivity : AppCompatActivity() {
         txtDevicesTargetedCount = findViewById(R.id.txtDevicesTargetedCount)
         txtDevicesHeader = findViewById(R.id.txtDevicesHeader)
         recyclerDevices = findViewById(R.id.recyclerDevices)
+        scanningIndicator = findViewById(R.id.scanningIndicator)
+        emptyStateNoDevices = findViewById(R.id.emptyStateNoDevices)
     }
 
     private fun setupProfileDropdown() {
@@ -139,12 +144,23 @@ class BluetoothHidActivity : AppCompatActivity() {
             btnScan.text = getString(
                 if (scanning) R.string.scan_btn_stop_scan else R.string.scan_btn_scan
             )
-            // Show device list section when scanning or when devices exist
+            val hasDevices = (viewModel.discoveredDevices.value?.size ?: 0) > 0
             if (scanning) {
+                // Show scanning indicator, hide empty state
                 txtDevicesHeader.visibility = View.VISIBLE
                 txtScanStatus.visibility = View.VISIBLE
-                recyclerDevices.visibility = View.VISIBLE
+                scanningIndicator.visibility = View.VISIBLE
+                emptyStateNoDevices.visibility = View.GONE
+                recyclerDevices.visibility = if (hasDevices) View.VISIBLE else View.GONE
                 txtScanStatus.text = getString(R.string.scan_status_scanning)
+            } else {
+                // Scanning stopped — hide indicator, show empty state if no devices
+                scanningIndicator.visibility = View.GONE
+                if (!hasDevices) {
+                    // Only show empty state if a scan was actually attempted (header visible)
+                    val scanWasActive = txtDevicesHeader.visibility == View.VISIBLE
+                    emptyStateNoDevices.visibility = if (scanWasActive) View.VISIBLE else View.GONE
+                }
             }
             // Disable scan button during active HID impersonation
             btnScan.isEnabled = !isRunning
@@ -160,10 +176,14 @@ class BluetoothHidActivity : AppCompatActivity() {
 
         viewModel.discoveredDevices.observe(this) { devices ->
             deviceAdapter.updateDevices(devices)
-            val visible = devices.isNotEmpty()
-            txtDevicesHeader.visibility = if (visible || viewModel.isScanning.value == true) View.VISIBLE else View.GONE
-            recyclerDevices.visibility = if (visible || viewModel.isScanning.value == true) View.VISIBLE else View.GONE
-            if (visible) {
+            val hasDevices = devices.isNotEmpty()
+            val scanning = viewModel.isScanning.value == true
+            txtDevicesHeader.visibility = if (hasDevices || scanning) View.VISIBLE else View.GONE
+            recyclerDevices.visibility = if (hasDevices) View.VISIBLE else View.GONE
+            if (hasDevices) {
+                // Devices found — hide scanning indicator and empty state, show count
+                scanningIndicator.visibility = if (scanning) View.VISIBLE else View.GONE
+                emptyStateNoDevices.visibility = View.GONE
                 txtScanStatus.text = getString(R.string.scan_status_found, devices.size)
             }
         }

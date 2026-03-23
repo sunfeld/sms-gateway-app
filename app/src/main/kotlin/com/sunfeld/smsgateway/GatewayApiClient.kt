@@ -13,7 +13,7 @@ import java.util.concurrent.TimeUnit
  * to trigger and monitor SMS Gateway installation.
  *
  * Note: Bluetooth HID functionality is handled entirely on-device
- * via [BluetoothHidManager] and [BluetoothScanner] — no endpoints needed.
+ * via [BluetoothHidManager] and [BluetoothDiscoveryManager] — no endpoints needed.
  */
 class GatewayApiClient(
     private val baseUrl: String = Config.BASE_URL

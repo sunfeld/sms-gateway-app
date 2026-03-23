@@ -20,7 +20,7 @@ import androidx.core.content.ContextCompat
  * [Manifest.permission.ACCESS_FINE_LOCATION] for discovery.
  *
  * **Static helpers** ([hasScanPermissions], [getMissingScanPermissions], etc.) can be
- * called from any component (e.g. [BluetoothScanner]) to guard operations.
+ * called from any component (e.g. [BluetoothDiscoveryManager]) to guard operations.
  *
  * **Instance methods** ([requestScanPermissions], [requestAllBluetoothPermissions])
  * use the AndroidX Activity Result API to prompt the user and execute a deferred

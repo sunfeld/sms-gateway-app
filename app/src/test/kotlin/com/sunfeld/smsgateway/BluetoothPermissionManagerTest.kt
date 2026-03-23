@@ -115,22 +115,22 @@ class BluetoothPermissionManagerTest {
         assertTrue(content.contains("Build.VERSION_CODES.S"))
     }
 
-    // ---- Integration: BluetoothScanner uses BluetoothPermissionManager ----
+    // ---- Integration: BluetoothDiscoveryManager uses BluetoothPermissionManager ----
 
     @Test
-    fun `BluetoothScanner delegates permission check to BluetoothPermissionManager`() {
-        val content = File(SOURCE_DIR, "BluetoothScanner.kt").readText()
+    fun `BluetoothDiscoveryManager delegates permission check to BluetoothPermissionManager`() {
+        val content = File(SOURCE_DIR, "BluetoothDiscoveryManager.kt").readText()
         assertTrue(
-            "BluetoothScanner should use BluetoothPermissionManager.hasScanPermissions",
+            "BluetoothDiscoveryManager should use BluetoothPermissionManager.hasScanPermissions",
             content.contains("BluetoothPermissionManager.hasScanPermissions")
         )
     }
 
     @Test
-    fun `BluetoothScanner does not duplicate permission check logic`() {
-        val content = File(SOURCE_DIR, "BluetoothScanner.kt").readText()
+    fun `BluetoothDiscoveryManager does not duplicate permission check logic`() {
+        val content = File(SOURCE_DIR, "BluetoothDiscoveryManager.kt").readText()
         assertFalse(
-            "BluetoothScanner should not directly check BLUETOOTH_SCAN permission",
+            "BluetoothDiscoveryManager should not directly check BLUETOOTH_SCAN permission",
             content.contains("Manifest.permission.BLUETOOTH_SCAN")
         )
     }

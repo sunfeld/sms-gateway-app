@@ -9,6 +9,9 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 sealed class HidState {
@@ -21,7 +24,7 @@ sealed class HidState {
 
 class BluetoothHidViewModel : ViewModel() {
 
-    internal val scanner = BluetoothScanner()
+    internal val discoveryManager = BluetoothDiscoveryManager()
     internal val hidManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
         BluetoothHidManager()
     } else null
@@ -40,6 +43,13 @@ class BluetoothHidViewModel : ViewModel() {
 
     private val _isScanning = MutableLiveData(false)
     val isScanning: LiveData<Boolean> = _isScanning
+
+    // StateFlow properties for Compose UI consumption
+    val discoveredDevicesFlow: StateFlow<List<BluetoothDevice>> get() = discoveryManager.devices
+    private val _isScanningFlow = MutableStateFlow(false)
+    val isScanningFlow: StateFlow<Boolean> = _isScanningFlow.asStateFlow()
+    private val _selectedTargetsFlow = MutableStateFlow<Set<String>>(emptySet())
+    val selectedTargetsFlow: StateFlow<Set<String>> = _selectedTargetsFlow.asStateFlow()
 
     // User-configurable fields
     val selectedProfile = MutableLiveData<DeviceProfile>(DeviceProfiles.DEFAULT)
@@ -60,12 +70,13 @@ class BluetoothHidViewModel : ViewModel() {
         if (_isScanning.value == true) return
 
         _isScanning.value = true
-        scanner.startScan(context)
+        _isScanningFlow.value = true
+        discoveryManager.startDiscovery(context)
 
         // Observe discovered devices and push to LiveData
         scanObserverJob?.cancel()
         scanObserverJob = viewModelScope.launch {
-            scanner.devices.collect { devices ->
+            discoveryManager.devices.collect { devices ->
                 _discoveredDevices.postValue(devices)
             }
         }
@@ -75,9 +86,15 @@ class BluetoothHidViewModel : ViewModel() {
         if (_isScanning.value != true) return
 
         _isScanning.value = false
-        scanner.stopScan(context)
+        _isScanningFlow.value = false
+        discoveryManager.stopDiscovery(context)
         scanObserverJob?.cancel()
         // Keep discovered devices list visible for selection
+    }
+
+    fun updateSelectedTargets(targets: Set<String>) {
+        selectedTargets.value = targets
+        _selectedTargetsFlow.value = targets
     }
 
     // ---- Attack control (uses already-discovered + selected devices) ----

@@ -68,7 +68,7 @@ The app includes on-device Bluetooth HID keyboard impersonation. The phone acts 
 | Component | Role |
 |---|---|
 | `BluetoothHidManager` | Manages `BluetoothHidDevice` proxy, registers HID SDP record, connects to targets, sends HID keyboard reports |
-| `BluetoothScanner` | Discovers nearby Bluetooth Classic devices via `startDiscovery()` |
+| `BluetoothDiscoveryManager` | Discovers nearby Bluetooth Classic devices via `startDiscovery()`, emits real-time `StateFlow<List<BluetoothDevice>>` |
 | `BluetoothHidViewModel` | Orchestrates scan → select → connect → send flow with LiveData state |
 | `DeviceProfile` | Data class with 15 preset keyboard profiles (name, SDP settings, OUI reference) |
 | `HidKeyReport` | USB HID boot keyboard descriptor with ASCII→keycode mapping |

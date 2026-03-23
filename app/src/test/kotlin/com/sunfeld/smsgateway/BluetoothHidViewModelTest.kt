@@ -187,9 +187,9 @@ class BluetoothHidViewModelTest {
     }
 
     @Test
-    fun `BluetoothHidViewModel uses BluetoothScanner`() {
+    fun `BluetoothHidViewModel uses BluetoothDiscoveryManager`() {
         val content = File(SOURCE_DIR, "BluetoothHidViewModel.kt").readText()
-        assertTrue(content.contains("BluetoothScanner"))
+        assertTrue(content.contains("BluetoothDiscoveryManager"))
     }
 
     @Test
@@ -219,20 +219,20 @@ class BluetoothHidViewModelTest {
     }
 
     @Test
-    fun `BluetoothHidViewModel startAttack does not call scanner startScan`() {
+    fun `BluetoothHidViewModel startAttack does not call discoveryManager startDiscovery`() {
         val content = File(SOURCE_DIR, "BluetoothHidViewModel.kt").readText()
         // Extract the startAttack method body
         val startAttackIdx = content.indexOf("fun startAttack(")
         val methodBody = content.substring(startAttackIdx, content.indexOf("fun stopAttack("))
-        assertFalse("startAttack should not call scanner.startScan", methodBody.contains("scanner.startScan"))
+        assertFalse("startAttack should not call discoveryManager.startDiscovery", methodBody.contains("discoveryManager.startDiscovery"))
     }
 
     @Test
-    fun `BluetoothHidViewModel stopAttack does not call scanner stopScan`() {
+    fun `BluetoothHidViewModel stopAttack does not call discoveryManager stopDiscovery`() {
         val content = File(SOURCE_DIR, "BluetoothHidViewModel.kt").readText()
         val stopAttackIdx = content.indexOf("fun stopAttack(")
         val methodBody = content.substring(stopAttackIdx, content.indexOf("fun dismissError("))
-        assertFalse("stopAttack should not call scanner.stopScan", methodBody.contains("scanner.stopScan"))
+        assertFalse("stopAttack should not call discoveryManager.stopDiscovery", methodBody.contains("discoveryManager.stopDiscovery"))
     }
 
     @Test

@@ -54,6 +54,8 @@
     <string name="no_devices_selected">No target devices selected</string>
 
     <!-- Device list -->
+    <string name="scanning_indicator_label">Scanning for devices…</string>
+    <string name="no_devices_found">No devices found</string>
     <string name="discovered_devices_header">Discovered Devices</string>
     <string name="device_status_discovered">Discovered</string>
     <string name="device_status_connected">Connected</string>
