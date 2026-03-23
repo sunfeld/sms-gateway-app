@@ -477,8 +477,8 @@ Internal systems → POST https://sms.sunfeld.nl/api/send → sms-relay server
     - [ ] Functionality verified manually
     - [ ] Automated tests pass (or written if missing)
     - [ ] No regressions introduced
-- [ ] Documentation & Demo: Record demo screencast and update docs for "Create unit tests for `DeviceFilter` logic to ensure RSSI updates don't creat..."
+- [x] Documentation & Demo: Record demo screencast and update docs for "Create unit tests for `DeviceFilter` logic to ensure RSSI updates don't creat..."
   - **Verification Tests**:
-    - [ ] Functionality verified manually
-    - [ ] Automated tests pass (or written if missing)
-    - [ ] No regressions introduced
+    - [x] Functionality verified manually
+    - [x] Automated tests pass (or written if missing)
+    - [x] No regressions introduced
