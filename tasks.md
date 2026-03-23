@@ -470,7 +470,7 @@ Internal systems → POST https://sms.sunfeld.nl/api/send → sms-relay server
 - [x] Add a `ScanningIndicator` component and empty-state logic that toggles visibility based on the `isScanning` boolean state, including a "No devices found" fallback.
   - **Verification Tests**:
     - [x] Functionality verified manually
-    - [ ] Automated tests pass (or written if missing)
+    - [x] Automated tests pass (or written if missing)
     - [x] No regressions introduced
 - [x] Create unit tests for `DeviceFilter` logic to ensure RSSI updates don't create duplicate entries and an integration test to verify UI population from a mocked Bluetooth stream.
   - **Verification Tests**:
