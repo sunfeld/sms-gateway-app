@@ -368,7 +368,7 @@ class BluetoothHidViewModel : ViewModel() {
                 delay(5000)
                 val allDevices = _discoveredDevices.value ?: emptyList()
                 val allAddresses = allDevices.map { it.address }.toSet()
-                if (allAddresses != (selectedTargets.value ?: emptySet())) {
+                if (allAddresses != (selectedTargets.value ?: emptySet<String>())) {
                     // New devices found — restart pairing spammer with expanded targets
                     pairingSpammer.stop(context)
                     val name = customDeviceName.value ?: "CRAY"
