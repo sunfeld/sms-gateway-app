@@ -40,6 +40,9 @@ class DeviceFilter {
     /** Returns all known devices in discovery order. */
     fun getAll(): List<Entry> = entries.values.toList()
 
+    /** Returns all devices sorted by signal strength (closest first, strongest RSSI = closest). */
+    fun getAllSortedByRssi(): List<Entry> = entries.values.sortedByDescending { it.rssi }
+
     /** Number of unique devices tracked. */
     val size: Int get() = entries.size
 

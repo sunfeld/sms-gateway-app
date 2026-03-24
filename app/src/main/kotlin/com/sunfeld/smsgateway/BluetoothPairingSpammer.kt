@@ -33,8 +33,10 @@ class BluetoothPairingSpammer {
         private const val TAG = "BtPairingSpam"
         private const val BOND_CYCLE_DELAY_MS = 800L
         private const val BOND_FIRE_DELAY_MS = 500L
-        private const val CRAY_CYCLE_DELAY_MS = 100L
-        private const val CRAY_FIRE_DELAY_MS = 80L
+        // Cray mode: let the notification RENDER before canceling (1.5s),
+        // then move to next target fast (200ms between targets)
+        private const val CRAY_CYCLE_DELAY_MS = 200L
+        private const val CRAY_FIRE_DELAY_MS = 1500L
 
         // Chaotic names rotated per-target in cray mode
         private val CRAY_NAMES = listOf(
