@@ -49,12 +49,22 @@ object PayloadRepository {
         val defaults = listOf(
             BluetoothPayload.pairingName("Quick Message", "Hello!"),
             BluetoothPayload.contact(
-                name = "Sample Contact",
+                name = "My Contact Card",
                 fullName = "John Doe",
                 phone = "+31612345678",
                 email = "john@example.com",
                 org = "Sunfeld",
                 note = "Sent via Bluetooth"
+            ),
+            BluetoothPayload.contact(
+                name = "Phone Number Only",
+                fullName = "Call Me",
+                phone = "+31600000000"
+            ),
+            BluetoothPayload.contact(
+                name = "Email Only",
+                fullName = "Email Me",
+                email = "hello@example.com"
             ),
             BluetoothPayload.calendarEvent(
                 name = "Meeting Invite",
@@ -62,7 +72,12 @@ object PayloadRepository {
                 description = "Let's meet up",
                 location = "Amsterdam"
             ),
-            BluetoothPayload.note("Hello Note", "This is a Bluetooth message")
+            BluetoothPayload.note("Hello Note", "This is a Bluetooth message"),
+            BluetoothPayload(
+                name = "Custom Text File",
+                type = BluetoothPayload.PayloadType.TEXT,
+                data = mapOf("text" to "Hello from SMS Gateway!")
+            )
         )
 
         defaults.forEach { save(context, it) }

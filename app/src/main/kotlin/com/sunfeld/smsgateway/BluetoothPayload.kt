@@ -1,5 +1,8 @@
 package com.sunfeld.smsgateway
 
+import android.content.Context
+import android.net.Uri
+import android.util.Base64
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import java.text.SimpleDateFormat
@@ -11,26 +14,31 @@ import java.util.UUID
  * Represents a data payload that can be sent via Bluetooth OBEX push.
  *
  * Supported types:
- * - VCARD: Contact information (.vcf)
- * - VCALENDAR: Calendar event/invite (.ics)
- * - VNOTE: Text note (.vnt)
- * - TEXT: Raw text message
- * - PAIRING_NAME: Device name for pairing request spam (no OBEX)
+ * - VCARD: Contact information (.vcf) — shows "Add contact?" on target
+ * - VCARD_PHOTO: Contact with embedded BASE64 photo (.vcf)
+ * - VCALENDAR: Calendar event/invite (.ics) — shows "Add event?" on target
+ * - VNOTE: Text note (.vnt) — opens in note app
+ * - IMAGE: JPEG/PNG image (.jpg/.png) — shows photo preview on target
+ * - TEXT: Raw text file (.txt)
+ * - PAIRING_NAME: Device name for pairing request spam (no OBEX, uses BLE+createBond)
  */
 data class BluetoothPayload(
     val id: String = UUID.randomUUID().toString(),
     val name: String,
     val type: PayloadType,
     val data: Map<String, String>, // Key-value pairs specific to the type
+    val binaryData: ByteArray? = null, // For IMAGE type — raw image bytes
     val createdAt: Long = System.currentTimeMillis()
 ) {
 
     enum class PayloadType {
-        VCARD,       // Contact card
-        VCALENDAR,   // Calendar event
-        VNOTE,       // Text note
-        TEXT,        // Raw text
-        PAIRING_NAME // Just a device name for pairing dialog
+        VCARD,        // Contact card
+        VCARD_PHOTO,  // Contact card with embedded photo
+        VCALENDAR,    // Calendar event
+        VNOTE,        // Text note
+        IMAGE,        // JPEG/PNG image (binary)
+        TEXT,         // Raw text
+        PAIRING_NAME  // Just a device name for pairing dialog
     }
 
     /**
@@ -38,10 +46,21 @@ data class BluetoothPayload(
      */
     fun toFileContent(): String = when (type) {
         PayloadType.VCARD -> buildVCard()
+        PayloadType.VCARD_PHOTO -> buildVCardWithPhoto()
         PayloadType.VCALENDAR -> buildVCalendar()
         PayloadType.VNOTE -> buildVNote()
+        PayloadType.IMAGE -> "" // Binary — use toFileBytes() instead
         PayloadType.TEXT -> data["text"] ?: ""
         PayloadType.PAIRING_NAME -> data["name"] ?: "Hello"
+    }
+
+    /**
+     * Get binary content for OBEX push. For text types, encodes to UTF-8.
+     * For IMAGE type, returns the raw binary data.
+     */
+    fun toFileBytes(): ByteArray = when (type) {
+        PayloadType.IMAGE -> binaryData ?: ByteArray(0)
+        else -> toFileContent().toByteArray(Charsets.UTF_8)
     }
 
     /**
@@ -49,8 +68,10 @@ data class BluetoothPayload(
      */
     fun mimeType(): String = when (type) {
         PayloadType.VCARD -> "text/x-vcard"
+        PayloadType.VCARD_PHOTO -> "text/x-vcard"
         PayloadType.VCALENDAR -> "text/x-vcalendar"
         PayloadType.VNOTE -> "text/x-vnote"
+        PayloadType.IMAGE -> data["imageMimeType"] ?: "image/jpeg"
         PayloadType.TEXT -> "text/plain"
         PayloadType.PAIRING_NAME -> ""
     }
@@ -60,11 +81,16 @@ data class BluetoothPayload(
      */
     fun fileExtension(): String = when (type) {
         PayloadType.VCARD -> ".vcf"
+        PayloadType.VCARD_PHOTO -> ".vcf"
         PayloadType.VCALENDAR -> ".ics"
         PayloadType.VNOTE -> ".vnt"
+        PayloadType.IMAGE -> if (data["imageMimeType"] == "image/png") ".png" else ".jpg"
         PayloadType.TEXT -> ".txt"
         PayloadType.PAIRING_NAME -> ""
     }
+
+    /** Whether this payload type uses OBEX push (vs pairing spam) */
+    fun isObexPayload(): Boolean = type != PayloadType.PAIRING_NAME
 
     /**
      * Get the display name for the file being pushed.
@@ -115,6 +141,28 @@ data class BluetoothPayload(
             if (location.isNotBlank()) appendLine("LOCATION:$location")
             appendLine("END:VEVENT")
             appendLine("END:VCALENDAR")
+        }
+    }
+
+    private fun buildVCardWithPhoto(): String {
+        val fn = data["fullName"] ?: "Contact"
+        val phone = data["phone"] ?: ""
+        val email = data["email"] ?: ""
+        val org = data["organization"] ?: ""
+        val photoBase64 = data["photoBase64"] ?: ""
+        val photoType = data["photoType"] ?: "JPEG"
+
+        return buildString {
+            appendLine("BEGIN:VCARD")
+            appendLine("VERSION:3.0")
+            appendLine("FN:$fn")
+            if (phone.isNotBlank()) appendLine("TEL;TYPE=CELL:$phone")
+            if (email.isNotBlank()) appendLine("EMAIL:$email")
+            if (org.isNotBlank()) appendLine("ORG:$org")
+            if (photoBase64.isNotBlank()) {
+                appendLine("PHOTO;TYPE=$photoType;ENCODING=b:$photoBase64")
+            }
+            appendLine("END:VCARD")
         }
     }
 
@@ -170,6 +218,48 @@ data class BluetoothPayload(
                 type = PayloadType.VNOTE,
                 data = mapOf("body" to body)
             )
+        }
+
+        /** Create a vCard with embedded BASE64 photo */
+        fun contactWithPhoto(
+            name: String, fullName: String, phone: String = "", email: String = "",
+            org: String = "", photoBase64: String, photoType: String = "JPEG"
+        ): BluetoothPayload {
+            return BluetoothPayload(
+                name = name,
+                type = PayloadType.VCARD_PHOTO,
+                data = mapOf(
+                    "fullName" to fullName,
+                    "phone" to phone,
+                    "email" to email,
+                    "organization" to org,
+                    "photoBase64" to photoBase64,
+                    "photoType" to photoType
+                )
+            )
+        }
+
+        /** Create an image payload from raw bytes */
+        fun image(name: String, imageBytes: ByteArray, mimeType: String = "image/jpeg"): BluetoothPayload {
+            return BluetoothPayload(
+                name = name,
+                type = PayloadType.IMAGE,
+                data = mapOf("imageMimeType" to mimeType),
+                binaryData = imageBytes
+            )
+        }
+
+        /** Create an image payload from a content URI */
+        fun imageFromUri(context: Context, name: String, uri: Uri): BluetoothPayload? {
+            return try {
+                val inputStream = context.contentResolver.openInputStream(uri) ?: return null
+                val bytes = inputStream.readBytes()
+                inputStream.close()
+                val mimeType = context.contentResolver.getType(uri) ?: "image/jpeg"
+                image(name, bytes, mimeType)
+            } catch (e: Exception) {
+                null
+            }
         }
 
         /** Create a pairing name payload (just sets BT adapter name) */

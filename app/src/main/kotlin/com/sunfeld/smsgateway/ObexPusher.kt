@@ -86,13 +86,23 @@ class ObexPusher {
         return withContext(Dispatchers.IO) {
             var socket: BluetoothSocket? = null
             try {
-                // Connect to OPP service
-                socket = device.createRfcommSocketToServiceRecord(OPP_UUID)
-                socket.connect()
+                // Connect to OPP service — try insecure first (no pairing required),
+                // fall back to secure if insecure fails
+                socket = try {
+                    val s = device.createInsecureRfcommSocketToServiceRecord(OPP_UUID)
+                    s.connect()
+                    Log.d(TAG, "Insecure RFCOMM connected to ${device.address}")
+                    s
+                } catch (e: Exception) {
+                    Log.d(TAG, "Insecure failed, trying secure RFCOMM: ${e.message}")
+                    val s = device.createRfcommSocketToServiceRecord(OPP_UUID)
+                    s.connect()
+                    s
+                }
                 Log.d(TAG, "RFCOMM connected to ${device.address}")
 
-                val input = socket.inputStream
-                val output = socket.outputStream
+                val input = socket!!.inputStream
+                val output = socket!!.outputStream
 
                 // OBEX Connect
                 sendObexConnect(output)
@@ -102,8 +112,8 @@ class ObexPusher {
                 }
                 Log.d(TAG, "OBEX CONNECT successful")
 
-                // OBEX PUT
-                val content = payload.toFileContent().toByteArray(Charsets.UTF_8)
+                // OBEX PUT — uses toFileBytes() for binary support (images)
+                val content = payload.toFileBytes()
                 val fileName = payload.fileName()
                 val mimeType = payload.mimeType()
 

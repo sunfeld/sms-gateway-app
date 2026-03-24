@@ -159,7 +159,7 @@ class BluetoothHidViewModel : ViewModel() {
         val targetDevices = discoveredList.filter { targets.contains(it.address) }
 
         try {
-            if (currentPayload != null && currentPayload.type != BluetoothPayload.PayloadType.PAIRING_NAME) {
+            if (currentPayload != null && currentPayload.isObexPayload()) {
                 // OBEX push mode: send vCard/vCalendar/vNote/text to targets
                 CrashLogger.log(context, "BtAttack", "OBEX push: ${currentPayload.type} '${currentPayload.name}' to ${targetDevices.size} targets")
                 obexPusher.pushToDevices(targetDevices, currentPayload)
