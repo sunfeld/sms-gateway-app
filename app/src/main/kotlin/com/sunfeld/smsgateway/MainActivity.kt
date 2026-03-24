@@ -19,6 +19,7 @@ class MainActivity : AppCompatActivity(), SmsStatusListener {
     private lateinit var btnProjectDetails: MaterialButton
     private lateinit var btnBluetoothHid: MaterialButton
     private lateinit var btnGatewaySettings: MaterialButton
+    private lateinit var btnDebugLog: MaterialButton
 
     private val requiredPermissions = arrayOf(
         Manifest.permission.SEND_SMS,
@@ -54,6 +55,7 @@ class MainActivity : AppCompatActivity(), SmsStatusListener {
         btnProjectDetails = findViewById(R.id.btnProjectDetails)
         btnBluetoothHid = findViewById(R.id.btnBluetoothHid)
         btnGatewaySettings = findViewById(R.id.btnGatewaySettings)
+        btnDebugLog = findViewById(R.id.btnDebugLog)
 
         // Disable send button until permissions are confirmed
         btnSend.isEnabled = false
@@ -62,6 +64,7 @@ class MainActivity : AppCompatActivity(), SmsStatusListener {
         btnProjectDetails.setOnClickListener { openProjectDetails() }
         btnBluetoothHid.setOnClickListener { openBluetoothHid() }
         btnGatewaySettings.setOnClickListener { openGatewaySettings() }
+        btnDebugLog.setOnClickListener { showDebugLog() }
 
         // Auto-start SMS relay service in background
         RelayService.start(this)
@@ -156,6 +159,19 @@ class MainActivity : AppCompatActivity(), SmsStatusListener {
     private fun openGatewaySettings() {
         val intent = Intent(this, GatewaySettingsActivity::class.java)
         startActivity(intent)
+    }
+
+    private fun showDebugLog() {
+        val log = CrashLogger.readLog(this)
+        com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+            .setTitle(getString(R.string.crash_log_title))
+            .setMessage(log)
+            .setPositiveButton("Close", null)
+            .setNeutralButton(getString(R.string.clear_log)) { _, _ ->
+                CrashLogger.clearLog(this)
+                Toast.makeText(this, "Log cleared", Toast.LENGTH_SHORT).show()
+            }
+            .show()
     }
 
     private fun openProjectDetails() {

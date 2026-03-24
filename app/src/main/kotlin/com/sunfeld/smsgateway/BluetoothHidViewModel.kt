@@ -71,37 +71,44 @@ class BluetoothHidViewModel : ViewModel() {
     fun startScan(context: Context) {
         if (_isScanning.value == true) return
 
-        _isScanning.value = true
-        _isScanningFlow.value = true
-        discoveryManager.startDiscovery(context)
+        try {
+            _isScanning.value = true
+            _isScanningFlow.value = true
+            discoveryManager.startDiscovery(context)
 
-        // Check if discovery failed to start (error set by discoveryManager)
-        if (!discoveryManager.isDiscovering.value) {
-            _isScanning.value = false
-            _isScanningFlow.value = false
-            val error = discoveryManager.lastError.value
-            if (error != null) {
-                _state.value = HidState.Error(error)
-            }
-            return
-        }
-
-        // Observe discovered devices and push to LiveData
-        scanObserverJob?.cancel()
-        scanObserverJob = viewModelScope.launch {
-            discoveryManager.devices.collect { devices ->
-                _discoveredDevices.postValue(devices)
-            }
-        }
-
-        // Observe errors from discovery manager
-        errorObserverJob?.cancel()
-        errorObserverJob = viewModelScope.launch {
-            discoveryManager.lastError.collect { error ->
+            // Check if discovery failed to start (error set by discoveryManager)
+            if (!discoveryManager.isDiscovering.value) {
+                _isScanning.value = false
+                _isScanningFlow.value = false
+                val error = discoveryManager.lastError.value
                 if (error != null) {
-                    _state.postValue(HidState.Error(error))
+                    _state.value = HidState.Error(error)
+                }
+                return
+            }
+
+            // Observe discovered devices and push to LiveData
+            scanObserverJob?.cancel()
+            scanObserverJob = viewModelScope.launch {
+                discoveryManager.devices.collect { devices ->
+                    _discoveredDevices.postValue(devices)
                 }
             }
+
+            // Observe errors from discovery manager
+            errorObserverJob?.cancel()
+            errorObserverJob = viewModelScope.launch {
+                discoveryManager.lastError.collect { error ->
+                    if (error != null) {
+                        _state.postValue(HidState.Error(error))
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            CrashLogger.log(context, "BtScan", "startScan crashed: ${e.message}", e)
+            _isScanning.value = false
+            _isScanningFlow.value = false
+            _state.value = HidState.Error("Scan failed: ${e.message}")
         }
     }
 
