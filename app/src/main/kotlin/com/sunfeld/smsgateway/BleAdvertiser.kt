@@ -36,7 +36,7 @@ class BleAdvertiser {
         // Random HID service UUID for keyboard appearance
         private val HID_SERVICE_UUID = ParcelUuid(UUID.fromString("00001812-0000-1000-8000-00805f9b34fb"))
         private const val CYCLE_INTERVAL_MS = 3000L
-        private const val CRAY_CYCLE_INTERVAL_MS = 500L
+        private const val CRAY_CYCLE_INTERVAL_MS = 300L
     }
 
     private val _broadcastCount = MutableStateFlow(0)
@@ -109,7 +109,10 @@ class BleAdvertiser {
         val crayNames = if (crayMode) {
             DeviceProfiles.ALL.map { it.sdpName } + listOf(
                 customName, "Free WiFi", "AirDrop - Open Me",
-                "Galaxy Buds Pro", "AirPods Pro", "Beats Studio"
+                "Galaxy Buds Pro", "AirPods Pro", "Beats Studio",
+                "JBL Flip 6", "Sony WH-1000XM5", "Bose QC Ultra",
+                "Ring Doorbell", "Tesla Model 3", "Tile Tracker",
+                "Chromecast", "Fire TV Stick", "Nintendo Switch"
             )
         } else null
 
