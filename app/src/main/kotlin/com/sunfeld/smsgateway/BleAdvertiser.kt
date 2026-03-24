@@ -36,6 +36,7 @@ class BleAdvertiser {
         // Random HID service UUID for keyboard appearance
         private val HID_SERVICE_UUID = ParcelUuid(UUID.fromString("00001812-0000-1000-8000-00805f9b34fb"))
         private const val CYCLE_INTERVAL_MS = 3000L
+        private const val CRAY_CYCLE_INTERVAL_MS = 500L
     }
 
     private val _broadcastCount = MutableStateFlow(0)
@@ -74,8 +75,9 @@ class BleAdvertiser {
      *
      * @param context Android context
      * @param customName The message to broadcast as the BLE device name
+     * @param crayMode If true, rapidly rotates through random device profile names
      */
-    fun start(context: Context, customName: String) {
+    fun start(context: Context, customName: String, crayMode: Boolean = false) {
         val btManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
         adapter = btManager?.adapter
 
@@ -103,17 +105,31 @@ class BleAdvertiser {
         _isAdvertising.value = true
         _broadcastCount.value = 0
 
+        val interval = if (crayMode) CRAY_CYCLE_INTERVAL_MS else CYCLE_INTERVAL_MS
+        val crayNames = if (crayMode) {
+            DeviceProfiles.ALL.map { it.sdpName } + listOf(
+                customName, "Free WiFi", "AirDrop - Open Me",
+                "Galaxy Buds Pro", "AirPods Pro", "Beats Studio"
+            )
+        } else null
+
         // Start cycling advertisements to keep them fresh
         cycleJob = scope.launch {
             while (isActive) {
-                startAdvertising(customName)
-                delay(CYCLE_INTERVAL_MS)
+                val name = if (crayNames != null) {
+                    crayNames.random().also {
+                        try { adapter?.setName(it) } catch (_: SecurityException) { }
+                    }
+                } else customName
+                startAdvertising(name)
+                delay(interval)
                 stopAdvertisingInternal()
-                delay(200) // Brief pause between cycles
+                delay(if (crayMode) 50L else 200L)
             }
         }
 
-        CrashLogger.log(context, TAG, "BLE spam started: name='$customName'")
+        val mode = if (crayMode) "CRAY" else "normal"
+        CrashLogger.log(context, TAG, "BLE spam started ($mode): name='$customName'")
     }
 
     private fun startAdvertising(customName: String) {

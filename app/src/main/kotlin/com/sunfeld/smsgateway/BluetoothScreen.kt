@@ -1,5 +1,11 @@
 package com.sunfeld.smsgateway
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,7 +31,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.livedata.observeAsState
@@ -37,6 +46,7 @@ fun BluetoothScreen(
     hidState: HidState,
     onScanClick: () -> Unit,
     onStartStopClick: () -> Unit,
+    onCrayModeClick: () -> Unit,
     onSavePreset: () -> Unit,
     onLoadPreset: () -> Unit,
     onPickImage: () -> Unit,
@@ -46,7 +56,10 @@ fun BluetoothScreen(
     val isScanning by viewModel.isScanningFlow.collectAsStateWithLifecycle()
     val keystrokesSent by viewModel.keystrokesSent.observeAsState(0)
     val connectedCount by viewModel.connectedCount.observeAsState(0)
-    val isRunning = hidState is HidState.Attacking || hidState is HidState.Scanning
+    val isCray by viewModel.isCrayMode.collectAsStateWithLifecycle()
+    val craySeconds by viewModel.craySecondsRemaining.collectAsStateWithLifecycle()
+    val crayDuration by viewModel.crayDuration.collectAsStateWithLifecycle()
+    val isRunning = hidState is HidState.Attacking || hidState is HidState.Scanning || hidState is HidState.CrayMode
 
     val selectedTab by viewModel.activeTab.collectAsStateWithLifecycle()
 
@@ -65,6 +78,20 @@ fun BluetoothScreen(
             text = stringResource(R.string.bluetooth_hid_description),
             style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier.padding(top = 8.dp)
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // ---- CRAY MODE SECTION ----
+        CrayModeCard(
+            isCrayActive = isCray,
+            secondsRemaining = craySeconds,
+            duration = crayDuration,
+            targetsCount = connectedCount,
+            broadcastCount = keystrokesSent,
+            enabled = !isRunning || isCray,
+            onDurationSelected = { viewModel.crayDuration.value = it },
+            onCrayClick = onCrayModeClick
         )
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -134,17 +161,17 @@ fun BluetoothScreen(
         // START/STOP Button
         Button(
             onClick = onStartStopClick,
-            enabled = hidState !is HidState.Stopping,
+            enabled = hidState !is HidState.Stopping && !isCray,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(64.dp),
-            colors = if (isRunning) ButtonDefaults.buttonColors(
+            colors = if (isRunning && !isCray) ButtonDefaults.buttonColors(
                 containerColor = MaterialTheme.colorScheme.error
             ) else ButtonDefaults.buttonColors()
         ) {
             Text(
                 text = stringResource(
-                    if (isRunning) R.string.hid_btn_stop else R.string.hid_btn_start
+                    if (isRunning && !isCray) R.string.hid_btn_stop else R.string.hid_btn_start
                 ),
                 style = MaterialTheme.typography.titleLarge
             )
@@ -167,6 +194,171 @@ fun BluetoothScreen(
             broadcastsSent = keystrokesSent,
             targetsCount = connectedCount
         )
+    }
+}
+
+@Composable
+private fun CrayModeCard(
+    isCrayActive: Boolean,
+    secondsRemaining: Int,
+    duration: Int,
+    targetsCount: Int,
+    broadcastCount: Int,
+    enabled: Boolean,
+    onDurationSelected: (Int) -> Unit,
+    onCrayClick: () -> Unit
+) {
+    val durations = listOf(30, 60, 120, 300)
+    val durationLabels = listOf("30s", "1m", "2m", "5m")
+
+    // Pulsing animation when active
+    val pulseAlpha = if (isCrayActive) {
+        val transition = rememberInfiniteTransition(label = "cray_pulse")
+        val alpha by transition.animateFloat(
+            initialValue = 0.6f,
+            targetValue = 1.0f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(400),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "cray_alpha"
+        )
+        alpha
+    } else 1f
+
+    val cardColor = if (isCrayActive) {
+        Color(0xFFB71C1C) // Deep red when active
+    } else {
+        MaterialTheme.colorScheme.errorContainer
+    }
+
+    val textColor = if (isCrayActive) Color.White else MaterialTheme.colorScheme.onErrorContainer
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .alpha(pulseAlpha),
+        colors = CardDefaults.cardColors(containerColor = cardColor),
+        elevation = CardDefaults.cardElevation(defaultElevation = if (isCrayActive) 8.dp else 2.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp)
+        ) {
+            Text(
+                text = if (isCrayActive) "CRAY MODE ACTIVE" else "CRAY MODE",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Black,
+                color = textColor
+            )
+
+            if (!isCrayActive) {
+                Text(
+                    text = "Auto-scan + attack ALL nearby devices at max speed",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = textColor,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            if (isCrayActive) {
+                // Active: show countdown + stats
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = formatCrayTimer(secondsRemaining),
+                            style = MaterialTheme.typography.displaySmall,
+                            fontWeight = FontWeight.Black,
+                            color = textColor
+                        )
+                        Text("REMAINING", style = MaterialTheme.typography.labelSmall, color = textColor)
+                    }
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = targetsCount.toString(),
+                            style = MaterialTheme.typography.displaySmall,
+                            fontWeight = FontWeight.Bold,
+                            color = textColor
+                        )
+                        Text("TARGETS", style = MaterialTheme.typography.labelSmall, color = textColor)
+                    }
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = formatCount(broadcastCount),
+                            style = MaterialTheme.typography.displaySmall,
+                            fontWeight = FontWeight.Bold,
+                            color = textColor
+                        )
+                        Text("HITS", style = MaterialTheme.typography.labelSmall, color = textColor)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Stop button
+                Button(
+                    onClick = onCrayClick,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color.White,
+                        contentColor = Color(0xFFB71C1C)
+                    )
+                ) {
+                    Text("STOP CRAY MODE", fontWeight = FontWeight.Black)
+                }
+            } else {
+                // Inactive: show duration picker + launch button
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    durations.forEachIndexed { index, dur ->
+                        OutlinedButton(
+                            onClick = { onDurationSelected(dur) },
+                            modifier = Modifier.weight(1f),
+                            colors = if (duration == dur) {
+                                ButtonDefaults.outlinedButtonColors(
+                                    containerColor = MaterialTheme.colorScheme.error.copy(alpha = 0.15f)
+                                )
+                            } else ButtonDefaults.outlinedButtonColors()
+                        ) {
+                            Text(
+                                durationLabels[index],
+                                fontWeight = if (duration == dur) FontWeight.Bold else FontWeight.Normal
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Button(
+                    onClick = onCrayClick,
+                    enabled = enabled,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(56.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFFB71C1C),
+                        contentColor = Color.White
+                    )
+                ) {
+                    Text(
+                        "GO CRAY",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Black
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -219,9 +411,16 @@ private fun formatStatus(state: HidState): String {
         is HidState.Idle -> stringResource(R.string.attack_state_idle)
         is HidState.Scanning -> stringResource(R.string.attack_state_scanning)
         is HidState.Attacking -> stringResource(R.string.attack_state_attacking, state.connectedCount)
+        is HidState.CrayMode -> "CRAY MODE: ${state.connectedCount} targets, ${state.secondsRemaining}s left"
         is HidState.Stopping -> stringResource(R.string.attack_state_stopping)
         is HidState.Error -> stringResource(R.string.attack_state_error)
     }
+}
+
+private fun formatCrayTimer(seconds: Int): String {
+    val min = seconds / 60
+    val sec = seconds % 60
+    return if (min > 0) String.format("%d:%02d", min, sec) else "${sec}s"
 }
 
 private fun formatCount(count: Int): String {
