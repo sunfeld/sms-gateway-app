@@ -26,6 +26,7 @@ class BluetoothHidViewModel : ViewModel() {
 
     internal val discoveryManager = BluetoothDiscoveryManager()
     internal val pairingSpammer = BluetoothPairingSpammer()
+    internal val bleAdvertiser = BleAdvertiser()
     internal val hidManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
         BluetoothHidManager()
     } else null
@@ -128,9 +129,9 @@ class BluetoothHidViewModel : ViewModel() {
         _selectedTargetsFlow.value = targets
     }
 
-    // ---- Attack control: pairing request spam ----
-    // Sets adapter name to custom message, then calls createBond() on each target.
-    // Target phones see a pairing dialog with the custom name = your message.
+    // ---- Attack control: dual-mode BLE advertisement + pairing request spam ----
+    // 1. BLE: Broadcasts custom device name via BLE advertisements (Flipper Zero style)
+    // 2. Classic: createBond() sends pairing requests showing custom name in dialog
 
     fun startAttack(context: Context) {
         if (_state.value is HidState.Scanning || _state.value is HidState.Attacking) return
@@ -150,18 +151,31 @@ class BluetoothHidViewModel : ViewModel() {
         _keystrokesSent.value = 0
 
         try {
+            // Start BLE advertisement spam (broadcasts custom name to ALL nearby devices)
+            bleAdvertiser.start(context, name)
+
+            // Start Classic pairing request spam to selected targets
             val discoveredList = _discoveredDevices.value ?: emptyList()
             pairingSpammer.start(context, name, targets, discoveredList)
 
-            // Observe connection attempt counter
+            // Observe pairing attempt counter
             connectedObserverJob = viewModelScope.launch {
                 pairingSpammer.connectionAttempts.collect { count ->
-                    _keystrokesSent.postValue(count)
+                    val bleCount = bleAdvertiser.broadcastCount.value
+                    _keystrokesSent.postValue(count + bleCount)
                     _state.postValue(HidState.Attacking(targets.size))
                 }
             }
 
-            // Observe errors
+            // Observe BLE broadcast counter
+            keystrokeObserverJob = viewModelScope.launch {
+                bleAdvertiser.broadcastCount.collect { bleCount ->
+                    val pairingCount = pairingSpammer.connectionAttempts.value
+                    _keystrokesSent.postValue(pairingCount + bleCount)
+                }
+            }
+
+            // Observe errors from pairing spammer
             errorObserverJob = viewModelScope.launch {
                 pairingSpammer.lastError.collect { error ->
                     if (error != null) {
@@ -170,7 +184,7 @@ class BluetoothHidViewModel : ViewModel() {
                 }
             }
 
-            CrashLogger.log(context, "BtAttack", "Pairing spam started: name='$name' targets=${targets.size}")
+            CrashLogger.log(context, "BtAttack", "Dual-mode attack started: BLE ads + pairing spam, name='$name' targets=${targets.size}")
         } catch (e: Exception) {
             CrashLogger.log(context, "BtAttack", "startAttack crashed: ${e.message}", e)
             _state.value = HidState.Error("Attack failed: ${e.message}")
@@ -188,6 +202,7 @@ class BluetoothHidViewModel : ViewModel() {
         errorObserverJob?.cancel()
 
         pairingSpammer.stop(context)
+        bleAdvertiser.stop(context)
 
         _state.value = HidState.Idle
     }

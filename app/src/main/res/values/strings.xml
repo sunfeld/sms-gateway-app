@@ -44,12 +44,12 @@
     <string name="attack_state_idle">Status: Idle</string>
     <string name="attack_state_scanning">Status: Scanning for devices…</string>
     <string name="attack_state_connecting">Status: Connecting to %1$d device(s)…</string>
-    <string name="attack_state_attacking">Status: Spamming pairing requests to %1$d device(s)</string>
+    <string name="attack_state_attacking">Status: BLE spam + pairing to %1$d target(s)</string>
     <string name="attack_state_stopping">Status: Stopping…</string>
     <string name="attack_state_error">Status: Error</string>
 
     <!-- Counters -->
-    <string name="keystrokes_sent_label">Pairing Requests</string>
+    <string name="keystrokes_sent_label">Broadcasts Sent</string>
     <string name="connected_label">Targets</string>
     <string name="no_devices_selected">No target devices selected</string>
 
