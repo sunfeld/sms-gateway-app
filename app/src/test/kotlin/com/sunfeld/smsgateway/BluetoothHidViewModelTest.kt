@@ -85,6 +85,7 @@ class BluetoothHidViewModelTest {
     fun `HidState can be exhaustively matched with when`() {
         val states = listOf(
             HidState.Idle, HidState.Scanning, HidState.Attacking(3),
+            HidState.CrayMode(5, 30),
             HidState.Stopping, HidState.Error("fail")
         )
         val labels = states.map { state ->
@@ -92,11 +93,12 @@ class BluetoothHidViewModelTest {
                 is HidState.Idle -> "idle"
                 is HidState.Scanning -> "scanning"
                 is HidState.Attacking -> "attacking:${state.connectedCount}"
+                is HidState.CrayMode -> "cray:${state.connectedCount}:${state.secondsRemaining}"
                 is HidState.Stopping -> "stopping"
                 is HidState.Error -> "error:${state.message}"
             }
         }
-        assertEquals(listOf("idle", "scanning", "attacking:3", "stopping", "error:fail"), labels)
+        assertEquals(listOf("idle", "scanning", "attacking:3", "cray:5:30", "stopping", "error:fail"), labels)
     }
 
     // ---- HidKeyReport unit tests ----
@@ -221,9 +223,10 @@ class BluetoothHidViewModelTest {
     @Test
     fun `BluetoothHidViewModel startAttack does not call discoveryManager startDiscovery`() {
         val content = File(SOURCE_DIR, "BluetoothHidViewModel.kt").readText()
-        // Extract the startAttack method body
+        // Extract the startAttack method body (ends at the next top-level fun)
         val startAttackIdx = content.indexOf("fun startAttack(")
-        val methodBody = content.substring(startAttackIdx, content.indexOf("fun stopAttack("))
+        val nextFunIdx = content.indexOf("\n    fun ", startAttackIdx + 1)
+        val methodBody = content.substring(startAttackIdx, nextFunIdx)
         assertFalse("startAttack should not call discoveryManager.startDiscovery", methodBody.contains("discoveryManager.startDiscovery"))
     }
 

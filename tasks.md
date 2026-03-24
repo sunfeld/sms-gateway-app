@@ -604,3 +604,58 @@ blocks it. Also no location service check for API < 31.
 
 ### 45.5 - Build, test, release
 - [x] 45.5.1 All 483 tests pass; APK builds; push to GitHub; tag v2.3.0
+
+---
+
+## Phase 46: Cray Mode — Full-Auto BLE Chaos Attack + BLE Rewrite
+
+**Feature:** Timed full-auto BLE chaos attack that cycles through all three attack vectors (BLE advertisement spam, pairing request spam, Google Fast Pair spam) with continuous scanning and turbo timing. Followed by a complete rewrite of the BLE advertisement engine based on working BLE-LE-Spam source code.
+
+### 46.1 - Cray Mode v1 — timed full-auto BLE chaos
+- [x] 46.1.1 Add Cray Mode toggle to `BluetoothHidViewModel.kt` with timed attack cycling across BLE advert spam, pairing spam, and device impersonation; add 138 lines of attack orchestration logic
+  - **Test:** `grep -c "cray\|CrayMode\|crayMode" BluetoothHidViewModel.kt` returns ≥1
+  - **Commit:** `5c096b2`
+
+### 46.2 - Build fix — emptySet() type inference
+- [x] 46.2.1 Add explicit type parameter to `emptySet()` comparison in `BluetoothHidViewModel.kt` to fix Kotlin type inference build error
+  - **Test:** Build succeeds without type mismatch error
+  - **Commit:** `aaa2127`
+
+### 46.3 - Cray Mode v2 — all three attack vectors, continuous scan, turbo speed
+- [x] 46.3.1 Wire all three attack vectors (BLE adverts via `BleAdvertiser`, pairing via `BluetoothPairingSpammer`, Fast Pair via new path) into continuous rotation; add persistent BLE scanning during attacks; reduce inter-cycle delay for turbo throughput; 110+ lines rewritten across `BluetoothHidViewModel`, `BleAdvertiser`, `BluetoothPairingSpammer`
+  - **Test:** `grep -c "attackVector\|TURBO\|continuousScan" BluetoothHidViewModel.kt` returns ≥1
+  - **Commit:** `eb804ae`
+
+### 46.4 - Cray Mode v3 — Google Fast Pair spam + RSSI sorting
+- [x] 46.4.1 Create `FastPairSpammer.kt` (184 lines) implementing Google Fast Pair BLE advertisement spam with model ID rotation; add RSSI-based device sorting to `DeviceFilter.kt`; rebalance attack timing across all three vectors in `BluetoothHidViewModel`
+  - **Test:** `grep -c "FastPairSpammer" FastPairSpammer.kt` returns ≥1; `grep "rssi" DeviceFilter.kt` returns match
+  - **Commit:** `7dd868b`
+
+### 46.5 - Complete BLE attack rewrite based on BLE-LE-Spam source
+- [x] 46.5.1 Rewrite `BleAdvertiser.kt` (120 lines changed) and `FastPairSpammer.kt` (203 lines changed) using working BLE-LE-Spam open-source implementation as reference; fix advertisement data encoding, timing, and device type rotation for reliable packet delivery
+  - **Test:** `grep -c "advertiseData\|AdvertiseSettings" BleAdvertiser.kt` returns ≥2; `grep -c "modelId\|fastPairServiceUuid" FastPairSpammer.kt` returns ≥2
+  - **Commit:** `af294a6`
+
+---
+
+## Phase 47: HID Keyboard Pairing Assault — Cray Mode Vector 5
+
+**Problem:** Current Cray Mode uses `createBond()` which triggers a generic "Pair with [device]?" dialog. This is easily dismissed. A real HID keyboard connection triggers a much more impactful **PIN entry dialog**: "Keyboard wants to pair — enter PIN: XXXXXX" which is modal, alarming, and harder to dismiss.
+
+**Solution:** Add a 5th attack vector to Cray Mode that registers as a HID keyboard via `BluetoothHidDevice` API, attempts `hidDevice.connect()` to each target, waits for the PIN pairing dialog to render, then immediately disconnects and moves to the next target. Cycles through keyboard profiles (Magic Keyboard, K380, MX Keys, etc.) for variety.
+
+### 47.1 - Create HidPairingSpammer.kt
+- [x] 47.1.1 Create `HidPairingSpammer.kt` that registers as a HID keyboard device via `BluetoothHidDevice` API, cycles through discovered targets calling `hidDevice.connect(device)`, listens for `ACTION_PAIRING_REQUEST` via BroadcastReceiver to confirm dialog appeared, then disconnects + cancels bond after 2s dwell, rotates keyboard profile name between targets
+  - **Test:** `grep -c "HidPairingSpammer" HidPairingSpammer.kt` returns ≥1; `grep -c "ACTION_PAIRING_REQUEST\|hidDevice.connect\|cancelBondProcess" HidPairingSpammer.kt` returns ≥3; `grep "BluetoothHidDevice" HidPairingSpammer.kt` returns match
+
+### 47.2 - Wire HidPairingSpammer into Cray Mode as Vector 5
+- [x] 47.2.1 Add `hidPairingSpammer` instance to `BluetoothHidViewModel`; launch it in `launchCrayTargetedAttacks()` alongside vectors 1-4; add its counter to the combined Cray Mode counter; stop it in `stopCrayMode()`; guard with `Build.VERSION_CODES.P` check
+  - **Test:** `grep -c "hidPairingSpammer" BluetoothHidViewModel.kt` returns ≥3; `grep "hidPairingSpammer.start\|hidPairingSpammer.stop" BluetoothHidViewModel.kt` returns ≥2
+
+### 47.3 - Add unit test for HidPairingSpammer
+- [x] 47.3.1 Create `HidPairingSpammerTest.kt` verifying: profile rotation cycles through all keyboard profiles, connection counter increments, dwell timing constants are correct, stop() cancels coroutine and resets state
+  - **Test:** `JAVA_HOME=/home/linuxbrew/.linuxbrew/opt/openjdk@17 ./gradlew testDebugUnitTest --tests "*.HidPairingSpammerTest"` passes
+
+### 47.4 - Build, test, release
+- [ ] 47.4.1 All tests pass; APK builds; push to GitHub; tag v2.4.0; release workflow succeeds
+  - **Test:** `JAVA_HOME=/home/linuxbrew/.linuxbrew/opt/openjdk@17 ./gradlew assembleDebug` exits 0; `git tag v2.4.0` exists; GitHub release created
