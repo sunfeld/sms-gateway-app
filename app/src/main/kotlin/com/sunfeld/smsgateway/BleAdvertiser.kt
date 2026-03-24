@@ -7,7 +7,6 @@ import android.bluetooth.le.AdvertiseData
 import android.bluetooth.le.AdvertiseSettings
 import android.bluetooth.le.BluetoothLeAdvertiser
 import android.content.Context
-import android.os.Build
 import android.os.ParcelUuid
 import android.util.Log
 import kotlinx.coroutines.*
@@ -19,24 +18,20 @@ import java.util.UUID
 /**
  * BLE Advertisement Spam — broadcasts custom device name via BLE advertisements.
  *
- * How it works:
- * 1. Sets BluetoothAdapter name to the custom message
- * 2. Starts BLE advertising with setIncludeDeviceName(true)
- * 3. Every nearby phone doing BLE scanning sees the custom name
- * 4. Cycles the advertiser on/off to ensure fresh broadcasts
- *
- * This is similar to Flipper Zero BLE spam but from an Android phone.
- * The device name IS the message — it appears in Bluetooth settings
- * and pairing notifications on nearby devices.
+ * FIXED approach (v3):
+ * - Start ONE continuous advertisement — never stop/start cycle
+ * - Change adapter name via setName() — Android updates the ad in-place
+ * - Connectable=true so devices see it as a real pairable device
+ * - Name changes every 2s (enough for scan cycle to pick up each name)
  */
 class BleAdvertiser {
 
     companion object {
         private const val TAG = "BleAdvertiser"
-        // Random HID service UUID for keyboard appearance
         private val HID_SERVICE_UUID = ParcelUuid(UUID.fromString("00001812-0000-1000-8000-00805f9b34fb"))
-        private const val CYCLE_INTERVAL_MS = 3000L
-        private const val CRAY_CYCLE_INTERVAL_MS = 300L
+        // How long each name stays before rotating (must exceed typical BLE scan interval)
+        private const val NAME_ROTATE_MS = 2000L
+        private const val CRAY_NAME_ROTATE_MS = 1500L
     }
 
     private val _broadcastCount = MutableStateFlow(0)
@@ -49,12 +44,11 @@ class BleAdvertiser {
     private var advertiser: BluetoothLeAdvertiser? = null
     private var originalAdapterName: String? = null
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    private var cycleJob: Job? = null
+    private var nameRotateJob: Job? = null
 
     private val advertiseCallback = object : AdvertiseCallback() {
         override fun onStartSuccess(settingsInEffect: AdvertiseSettings) {
-            Log.d(TAG, "BLE advertising started successfully")
-            _broadcastCount.value++
+            Log.d(TAG, "BLE advertising started — continuous mode")
         }
 
         override fun onStartFailure(errorCode: Int) {
@@ -72,10 +66,7 @@ class BleAdvertiser {
 
     /**
      * Start BLE advertisement spam with custom device name.
-     *
-     * @param context Android context
-     * @param customName The message to broadcast as the BLE device name
-     * @param crayMode If true, rapidly rotates through random device profile names
+     * Starts ONE continuous ad, then rotates the adapter name.
      */
     fun start(context: Context, customName: String, crayMode: Boolean = false) {
         val btManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
@@ -86,11 +77,9 @@ class BleAdvertiser {
             return
         }
 
-        // Set adapter name FIRST — this becomes the BLE advertised name
         try {
             originalAdapterName = adapter?.name
             adapter?.setName(customName)
-            Log.d(TAG, "Adapter name set to: '$customName' (was: '$originalAdapterName')")
         } catch (e: SecurityException) {
             Log.e(TAG, "Failed to set adapter name", e)
             return
@@ -105,7 +94,32 @@ class BleAdvertiser {
         _isAdvertising.value = true
         _broadcastCount.value = 0
 
-        val interval = if (crayMode) CRAY_CYCLE_INTERVAL_MS else CYCLE_INTERVAL_MS
+        // Start ONE continuous advertisement — never stop it
+        try {
+            val settings = AdvertiseSettings.Builder()
+                .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY)
+                .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_HIGH)
+                .setConnectable(true)
+                .setTimeout(0) // Indefinite
+                .build()
+
+            val advertiseData = AdvertiseData.Builder()
+                .setIncludeDeviceName(true)
+                .setIncludeTxPowerLevel(true)
+                .addServiceUuid(HID_SERVICE_UUID)
+                .build()
+
+            val scanResponse = AdvertiseData.Builder()
+                .setIncludeDeviceName(true)
+                .build()
+
+            advertiser?.startAdvertising(settings, advertiseData, scanResponse, advertiseCallback)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to start advertising", e)
+            return
+        }
+
+        // In cray mode, rotate the adapter name — Android updates the ad in-place
         val crayNames = if (crayMode) {
             DeviceProfiles.ALL.map { it.sdpName } + listOf(
                 customName, "Free WiFi", "AirDrop - Open Me",
@@ -116,64 +130,30 @@ class BleAdvertiser {
             )
         } else null
 
-        // Start cycling advertisements to keep them fresh
-        cycleJob = scope.launch {
+        val rotateInterval = if (crayMode) CRAY_NAME_ROTATE_MS else NAME_ROTATE_MS
+
+        nameRotateJob = scope.launch {
             while (isActive) {
-                val name = if (crayNames != null) {
-                    crayNames.random().also {
-                        try { adapter?.setName(it) } catch (_: SecurityException) { }
-                    }
-                } else customName
-                startAdvertising(name)
-                delay(interval)
-                stopAdvertisingInternal()
-                delay(if (crayMode) 50L else 200L)
+                delay(rotateInterval)
+                val name = crayNames?.random() ?: customName
+                try {
+                    adapter?.setName(name)
+                    _broadcastCount.value++
+                } catch (_: SecurityException) { }
             }
         }
 
         val mode = if (crayMode) "CRAY" else "normal"
-        CrashLogger.log(context, TAG, "BLE spam started ($mode): name='$customName'")
-    }
-
-    private fun startAdvertising(customName: String) {
-        try {
-            val settings = AdvertiseSettings.Builder()
-                .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY)
-                .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_HIGH)
-                .setConnectable(true) // Must be connectable for pairing dialogs
-                .setTimeout(0) // Advertise indefinitely
-                .build()
-
-            val advertiseData = AdvertiseData.Builder()
-                .setIncludeDeviceName(true) // Include the custom adapter name
-                .setIncludeTxPowerLevel(false)
-                .addServiceUuid(HID_SERVICE_UUID) // Appear as HID device
-                .build()
-
-            // Scan response with additional data
-            val scanResponse = AdvertiseData.Builder()
-                .setIncludeDeviceName(true)
-                .build()
-
-            advertiser?.startAdvertising(settings, advertiseData, scanResponse, advertiseCallback)
-            Log.d(TAG, "BLE advertisement cycle started")
-        } catch (e: SecurityException) {
-            Log.e(TAG, "SecurityException starting BLE advertising", e)
-        } catch (e: Exception) {
-            Log.e(TAG, "BLE advertising failed", e)
-        }
-    }
-
-    private fun stopAdvertisingInternal() {
-        try {
-            advertiser?.stopAdvertising(advertiseCallback)
-        } catch (_: Exception) { }
+        CrashLogger.log(context, TAG, "BLE spam started ($mode, continuous): name='$customName'")
     }
 
     fun stop(context: Context) {
         _isAdvertising.value = false
-        cycleJob?.cancel()
-        stopAdvertisingInternal()
+        nameRotateJob?.cancel()
+
+        try {
+            advertiser?.stopAdvertising(advertiseCallback)
+        } catch (_: Exception) { }
 
         // Restore original name
         originalAdapterName?.let { name ->
