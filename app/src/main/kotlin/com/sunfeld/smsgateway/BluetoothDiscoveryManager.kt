@@ -20,16 +20,11 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 /**
- * Manages Bluetooth Classic device discovery via [BluetoothAdapter.startDiscovery].
+ * Manages Bluetooth device discovery using BOTH Classic and BLE scanning.
  *
- * Registers a [BroadcastReceiver] that listens for [BluetoothDevice.ACTION_FOUND] events
- * and emits each newly discovered device into a [StateFlow] in real-time, de-duplicating
- * by MAC address. Auto-restarts the 12-second discovery window while [isDiscovering] is true.
- *
- * Usage:
- *   discoveryManager.startDiscovery(context)
- *   discoveryManager.devices.collect { list -> ... }
- *   discoveryManager.stopDiscovery(context)
+ * Every operation is wrapped in try-catch to prevent crashes.
+ * Errors are surfaced via [lastError] StateFlow for UI display.
+ * Comprehensive logging via [Log] and [CrashLogger] for remote diagnosis.
  */
 class BluetoothDiscoveryManager {
 
@@ -43,6 +38,9 @@ class BluetoothDiscoveryManager {
     private val _isDiscovering = MutableStateFlow(false)
     val isDiscovering: StateFlow<Boolean> = _isDiscovering.asStateFlow()
 
+    private val _lastError = MutableStateFlow<String?>(null)
+    val lastError: StateFlow<String?> = _lastError.asStateFlow()
+
     internal val filter = DeviceFilter()
 
     private var adapter: BluetoothAdapter? = null
@@ -51,92 +49,151 @@ class BluetoothDiscoveryManager {
     private var receiverRegistered = false
     private val devicesByAddress = mutableMapOf<String, BluetoothDevice>()
 
+    // Context reference for CrashLogger (set in startDiscovery)
+    private var appContext: Context? = null
+
     private val receiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
-            when (intent.action) {
-                BluetoothDevice.ACTION_FOUND -> {
-                    val device: BluetoothDevice? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                        intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
-                    } else {
-                        @Suppress("DEPRECATION")
-                        intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
+            try {
+                when (intent.action) {
+                    BluetoothDevice.ACTION_FOUND -> {
+                        val device: BluetoothDevice? = try {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
+                            } else {
+                                @Suppress("DEPRECATION")
+                                intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
+                            }
+                        } catch (e: Exception) {
+                            logError("getParcelableExtra failed", e)
+                            null
+                        }
+                        val rssi = intent.getShortExtra(BluetoothDevice.EXTRA_RSSI, 0)
+                        device?.let { addDevice(it, rssi) }
                     }
-                    val rssi = intent.getShortExtra(BluetoothDevice.EXTRA_RSSI, 0)
-                    device?.let { addDevice(it, rssi) }
-                }
-                BluetoothAdapter.ACTION_DISCOVERY_FINISHED -> {
-                    // Auto-restart discovery while active
-                    if (_isDiscovering.value) {
-                        adapter?.startDiscovery()
+                    BluetoothAdapter.ACTION_DISCOVERY_FINISHED -> {
+                        Log.d(TAG, "Classic discovery finished, active=${_isDiscovering.value}")
+                        if (_isDiscovering.value) {
+                            try {
+                                adapter?.startDiscovery()
+                            } catch (e: SecurityException) {
+                                logError("SecurityException restarting discovery", e)
+                            }
+                        }
                     }
                 }
+            } catch (e: Exception) {
+                logError("BroadcastReceiver.onReceive crashed", e)
             }
         }
     }
 
-    // BLE scan callback — catches devices that Classic discovery misses
     private val bleScanCallback = object : ScanCallback() {
         override fun onScanResult(callbackType: Int, result: ScanResult) {
-            result.device?.let { addDevice(it, result.rssi.toShort()) }
+            try {
+                result.device?.let { addDevice(it, result.rssi.toShort()) }
+            } catch (e: Exception) {
+                logError("BLE onScanResult crashed", e)
+            }
         }
 
         override fun onBatchScanResults(results: MutableList<ScanResult>) {
-            results.forEach { result ->
-                result.device?.let { addDevice(it, result.rssi.toShort()) }
+            try {
+                results.forEach { result ->
+                    result.device?.let { addDevice(it, result.rssi.toShort()) }
+                }
+            } catch (e: Exception) {
+                logError("BLE onBatchScanResults crashed", e)
             }
         }
 
         override fun onScanFailed(errorCode: Int) {
-            Log.w(TAG, "BLE scan failed with error code: $errorCode")
-            // Don't set error — Classic scan may still work
+            val errorName = when (errorCode) {
+                SCAN_FAILED_ALREADY_STARTED -> "ALREADY_STARTED"
+                SCAN_FAILED_APPLICATION_REGISTRATION_FAILED -> "APP_REGISTRATION_FAILED"
+                SCAN_FAILED_FEATURE_UNSUPPORTED -> "FEATURE_UNSUPPORTED"
+                SCAN_FAILED_INTERNAL_ERROR -> "INTERNAL_ERROR"
+                else -> "UNKNOWN($errorCode)"
+            }
+            Log.w(TAG, "BLE scan failed: $errorName")
+            logCrash("BLE scan failed: $errorName")
         }
     }
 
     private fun addDevice(device: BluetoothDevice, rssi: Short = 0) {
-        val name = try { device.name } catch (_: SecurityException) { null }
-        Log.d(TAG, "ACTION_FOUND: ${device.address} name=$name rssi=$rssi")
-        val isNew = filter.addOrUpdate(device.address, name, rssi)
-        if (isNew) {
-            devicesByAddress[device.address] = device
-            _devices.value = filter.getAll().mapNotNull { devicesByAddress[it.address] }
-            Log.d(TAG, "New device added. Total: ${_devices.value.size}")
+        try {
+            val address = device.address ?: return
+            val name = try { device.name } catch (_: SecurityException) { null }
+            Log.d(TAG, "Device found: $address name=$name rssi=$rssi")
+            val isNew = filter.addOrUpdate(address, name, rssi)
+            if (isNew) {
+                devicesByAddress[address] = device
+                _devices.value = filter.getAll().mapNotNull { devicesByAddress[it.address] }
+                Log.d(TAG, "New device added. Total: ${_devices.value.size}")
+            }
+        } catch (e: Exception) {
+            logError("addDevice crashed", e)
         }
     }
 
-    /** Last error message for UI display. Null when no error. */
-    private val _lastError = MutableStateFlow<String?>(null)
-    val lastError: StateFlow<String?> = _lastError.asStateFlow()
-
+    /**
+     * Start device discovery. Every step is individually try-caught.
+     * If one method fails, we continue with the others.
+     */
     fun startDiscovery(context: Context) {
+        appContext = context.applicationContext
         _lastError.value = null
+        logCrash("startDiscovery() called — SDK ${Build.VERSION.SDK_INT}, ${Build.MODEL}")
 
-        val btManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
-        adapter = btManager?.adapter
+        // Step 1: Get Bluetooth adapter
+        try {
+            val btManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
+            adapter = btManager?.adapter
+        } catch (e: Exception) {
+            logError("Failed to get BluetoothAdapter", e)
+            _lastError.value = "Bluetooth not available: ${e.message}"
+            return
+        }
+
         if (adapter == null) {
-            Log.e(TAG, "BluetoothAdapter unavailable — no BT hardware?")
+            logCrash("BluetoothAdapter is null — no BT hardware?")
             _lastError.value = "Bluetooth not available on this device"
             return
         }
 
-        if (adapter?.isEnabled != true) {
-            Log.e(TAG, "Bluetooth is OFF")
-            _lastError.value = "Turn on Bluetooth to scan for devices"
-            return
-        }
-
-        if (!hasRequiredPermissions(context)) {
-            Log.e(TAG, "Missing required BT permissions")
-            _lastError.value = "Bluetooth permissions not granted"
-            return
-        }
-
-        // On API < 31, Bluetooth Classic discovery requires Location to be ON
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
-            val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
-            if (locationManager != null && !locationManager.isLocationEnabled) {
-                Log.e(TAG, "Location services disabled — BT discovery requires location on API < 31")
-                _lastError.value = "Enable Location in Settings for Bluetooth scanning"
+        // Step 2: Check Bluetooth is enabled
+        try {
+            if (adapter?.isEnabled != true) {
+                logCrash("Bluetooth is disabled")
+                _lastError.value = "Turn on Bluetooth to scan for devices"
                 return
+            }
+        } catch (e: Exception) {
+            logError("Exception checking BT enabled", e)
+        }
+
+        // Step 3: Check permissions
+        try {
+            if (!hasRequiredPermissions(context)) {
+                logCrash("Missing BT permissions: ${BluetoothPermissionManager.getMissingScanPermissions(context)}")
+                _lastError.value = "Bluetooth permissions not granted"
+                return
+            }
+        } catch (e: Exception) {
+            logError("Exception checking permissions", e)
+        }
+
+        // Step 4: Check location for API < 31
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+            try {
+                val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
+                if (locationManager != null && !locationManager.isLocationEnabled) {
+                    logCrash("Location disabled on API ${Build.VERSION.SDK_INT}")
+                    _lastError.value = "Enable Location in Settings for Bluetooth scanning"
+                    return
+                }
+            } catch (e: Exception) {
+                logError("Exception checking location", e)
             }
         }
 
@@ -145,38 +202,45 @@ class BluetoothDiscoveryManager {
         devicesByAddress.clear()
         _devices.value = emptyList()
 
+        // Step 5: Register BroadcastReceiver
         if (!receiverRegistered) {
-            val intentFilter = IntentFilter().apply {
-                addAction(BluetoothDevice.ACTION_FOUND)
-                addAction(BluetoothAdapter.ACTION_DISCOVERY_FINISHED)
+            try {
+                val intentFilter = IntentFilter().apply {
+                    addAction(BluetoothDevice.ACTION_FOUND)
+                    addAction(BluetoothAdapter.ACTION_DISCOVERY_FINISHED)
+                }
+                // ContextCompat safely handles RECEIVER_EXPORTED across all API levels
+                ContextCompat.registerReceiver(
+                    context,
+                    receiver,
+                    intentFilter,
+                    ContextCompat.RECEIVER_EXPORTED
+                )
+                receiverRegistered = true
+                logCrash("BroadcastReceiver registered OK")
+            } catch (e: Exception) {
+                logError("CRITICAL: registerReceiver FAILED", e)
+                _lastError.value = "Failed to register Bluetooth receiver: ${e.message}"
+                _isDiscovering.value = false
+                return
             }
-            // RECEIVER_EXPORTED required for BT ACTION_FOUND — Bluetooth stack
-            // is a "highly privileged app", not a system broadcast.
-            // ContextCompat handles the API 33+ flag requirement safely on all API levels.
-            ContextCompat.registerReceiver(
-                context,
-                receiver,
-                intentFilter,
-                ContextCompat.RECEIVER_EXPORTED
-            )
-            receiverRegistered = true
-            Log.d(TAG, "BroadcastReceiver registered for ACTION_FOUND + DISCOVERY_FINISHED")
         }
 
-        // Start Classic Bluetooth discovery
+        // Step 6: Start Classic Bluetooth discovery
         try {
             adapter?.cancelDiscovery()
             val started = adapter?.startDiscovery() ?: false
-            Log.d(TAG, "Classic startDiscovery() returned: $started")
+            logCrash("Classic startDiscovery() returned: $started")
             if (!started) {
-                Log.w(TAG, "Classic discovery failed — will rely on BLE scan only")
+                logCrash("Classic discovery failed to start — will try BLE only")
             }
         } catch (e: SecurityException) {
-            Log.e(TAG, "SecurityException starting classic discovery", e)
+            logError("SecurityException on startDiscovery", e)
+        } catch (e: Exception) {
+            logError("Exception on startDiscovery", e)
         }
 
-        // Start BLE scan in parallel — catches modern devices that don't
-        // respond to Classic inquiry (most phones, BLE peripherals)
+        // Step 7: Start BLE scan
         startBleScan()
     }
 
@@ -184,20 +248,22 @@ class BluetoothDiscoveryManager {
         try {
             bleScanner = adapter?.bluetoothLeScanner
             if (bleScanner == null) {
-                Log.w(TAG, "BLE scanner unavailable")
+                logCrash("BLE scanner is null — adapter?.bluetoothLeScanner returned null")
                 return
             }
             val settings = ScanSettings.Builder()
                 .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
-                .setReportDelay(0) // Immediate results
+                .setReportDelay(0)
                 .build()
             bleScanner?.startScan(null, settings, bleScanCallback)
             bleScanActive = true
-            Log.d(TAG, "BLE scan started (LOW_LATENCY mode)")
+            logCrash("BLE scan started OK (LOW_LATENCY)")
         } catch (e: SecurityException) {
-            Log.w(TAG, "SecurityException starting BLE scan", e)
+            logError("SecurityException starting BLE scan", e)
+        } catch (e: IllegalStateException) {
+            logError("IllegalStateException starting BLE scan (adapter off?)", e)
         } catch (e: Exception) {
-            Log.w(TAG, "BLE scan start failed: ${e.message}")
+            logError("BLE scan start failed", e)
         }
     }
 
@@ -207,25 +273,32 @@ class BluetoothDiscoveryManager {
                 bleScanner?.stopScan(bleScanCallback)
             } catch (_: Exception) { }
             bleScanActive = false
-            Log.d(TAG, "BLE scan stopped")
         }
     }
 
     fun stopDiscovery(context: Context) {
         _isDiscovering.value = false
-        adapter?.cancelDiscovery()
+        try { adapter?.cancelDiscovery() } catch (_: Exception) { }
         stopBleScan()
 
         if (receiverRegistered) {
             try {
                 context.unregisterReceiver(receiver)
-            } catch (_: IllegalArgumentException) {
-                // Already unregistered
-            }
+            } catch (_: Exception) { }
             receiverRegistered = false
         }
     }
 
     private fun hasRequiredPermissions(context: Context): Boolean =
         BluetoothPermissionManager.hasScanPermissions(context)
+
+    private fun logError(message: String, e: Exception) {
+        Log.e(TAG, message, e)
+        appContext?.let { CrashLogger.log(it, TAG, "$message: ${e.message}", e) }
+    }
+
+    private fun logCrash(message: String) {
+        Log.d(TAG, message)
+        appContext?.let { CrashLogger.log(it, TAG, message) }
+    }
 }

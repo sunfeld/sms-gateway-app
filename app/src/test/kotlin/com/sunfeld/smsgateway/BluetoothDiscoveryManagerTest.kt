@@ -164,7 +164,7 @@ class BluetoothDiscoveryManagerTest {
     fun `calls filter addOrUpdate when device found`() {
         assertTrue(
             "Should pass device data to filter.addOrUpdate",
-            sourceContent.contains("filter.addOrUpdate(device.address, name, rssi)")
+            sourceContent.contains("filter.addOrUpdate(address, name, rssi)")
         )
     }
 
@@ -224,8 +224,8 @@ class BluetoothDiscoveryManagerTest {
     @Test
     fun `stopDiscovery handles already-unregistered receiver`() {
         assertTrue(
-            "Should catch IllegalArgumentException when receiver already unregistered",
-            sourceContent.contains("catch (_: IllegalArgumentException)")
+            "Should catch Exception when receiver already unregistered",
+            sourceContent.contains("catch (_: Exception)")
         )
     }
 

@@ -117,6 +117,31 @@ app.get('/api/status', (req, res) => {
   });
 });
 
+// Receive crash reports from the phone app
+app.post('/api/crash-report', (req, res) => {
+  const { device, sdk, log, timestamp } = req.body;
+  const fs = require('fs');
+  const path = require('path');
+  const crashFile = path.join(__dirname, 'keys', 'crash-reports.log');
+  const entry = `\n=== CRASH REPORT ${timestamp || new Date().toISOString()} ===\nDevice: ${device || 'unknown'} SDK: ${sdk || '?'}\n${log || 'no log'}\n`;
+  fs.appendFileSync(crashFile, entry);
+  console.log(`[crash-report] Received from ${device} SDK ${sdk}`);
+  res.json({ ok: true });
+});
+
+// Get crash reports (for debugging)
+app.get('/api/crash-reports', (req, res) => {
+  const fs = require('fs');
+  const path = require('path');
+  const crashFile = path.join(__dirname, 'keys', 'crash-reports.log');
+  try {
+    const content = fs.readFileSync(crashFile, 'utf8');
+    res.type('text/plain').send(content);
+  } catch {
+    res.type('text/plain').send('No crash reports yet');
+  }
+});
+
 // Get server public key (for phone pairing)
 app.get('/api/server-pubkey', (req, res) => {
   res.json({
