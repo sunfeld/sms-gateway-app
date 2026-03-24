@@ -546,3 +546,38 @@ blocks it. Also no location service check for API < 31.
 
 ### 43.6 - Build and release
 - [x] 43.6.1 All tests pass; APK builds; push to GitHub; tag v1.5.0; release workflow succeeds
+
+---
+
+## Phase 44: Tabbed BT UI — BLE Spam + Data Send with OBEX Payload Editor
+
+**Problem:** OBEX push code (BluetoothPayload, ObexPusher, PayloadRepository) existed since v2.0.0 but had NO UI. The `activePayload` in ViewModel was always null, making the entire OBEX code path dead code. Only BLE spam mode was accessible.
+
+**Solution:** Convert BluetoothHidActivity from XML to full Compose UI with two tabs: BLE Spam (existing pairing spam) and Data Send (new OBEX payload editor with type-specific forms and image picker).
+
+### 44.1 - Create BluetoothScreen.kt main composable
+- [x] 44.1.1 Create `BluetoothScreen.kt` with Material3 `TabRow` (BLE Spam / Data Send tabs), shared device list via `DeviceListScreen`, SCAN button, START/STOP button, status text, counter card
+  - **Test:** `grep -c "TabRow" BluetoothScreen.kt` returns ≥1; `grep "BleSpamTab\|DataSendTab" BluetoothScreen.kt` returns both
+
+### 44.2 - Create BleSpamTab.kt
+- [x] 44.2.1 Create `BleSpamTab.kt` with `ExposedDropdownMenuBox` profile selector, device name `OutlinedTextField`, message field, Save/Load Preset buttons
+  - **Test:** `grep -c "ProfileDropdown" BleSpamTab.kt` returns ≥1
+
+### 44.3 - Create DataSendTab.kt
+- [x] 44.3.1 Create `DataSendTab.kt` with payload type dropdown (6 OBEX types), dynamic form fields per type (VCardForm, CalendarForm, NoteForm, ImageForm, TextForm, VCardPhotoForm), payload name field, Save/Load Payload buttons, image picker trigger
+  - **Test:** `grep -c "PayloadTypeDropdown" DataSendTab.kt` returns ≥1; all 6 form types present
+
+### 44.4 - Update BluetoothHidViewModel with tab/payload state
+- [x] 44.4.1 Add `activeTab` StateFlow, `selectedPayloadType` StateFlow, `payloadFormFields` StateFlow, `payloadNameFlow`, `selectedImageLabel`; add `buildPayloadFromForm()`, `loadPayloadIntoForm()`, `updateFormField()`, `setImageData()`; wire `startAttack()` to build payload from form when on Data Send tab
+  - **Test:** `grep -c "buildPayloadFromForm\|activeTab\|selectedPayloadType" BluetoothHidViewModel.kt` returns ≥3
+
+### 44.5 - Convert BluetoothHidActivity to Compose
+- [x] 44.5.1 Replace `AppCompatActivity` + XML `setContentView` with `ComponentActivity` + Compose `setContent`; add `ActivityResultContracts.GetContent` image picker; add payload save/load dialog; maintain preset dialog compatibility via `applyPreset()` / `getCurrentPresetState()`
+  - **Test:** `grep -c "setContent" BluetoothHidActivity.kt` returns ≥1; `grep "ComponentActivity" BluetoothHidActivity.kt` returns match
+
+### 44.6 - Add string resources
+- [x] 44.6.1 Add tab labels (`tab_ble_spam`, `tab_data_send`), payload type labels, form field labels, image picker labels, payload save/load labels
+  - **Test:** `grep -c "tab_ble_spam\|tab_data_send\|payload_type_" strings.xml` returns ≥8
+
+### 44.7 - Build, test, release
+- [x] 44.7.1 All 481 tests pass; APK builds; push to GitHub; tag v2.2.0; release workflow running
