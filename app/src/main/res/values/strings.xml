@@ -96,6 +96,10 @@
     <string name="discovered_devices_header">Discovered Devices</string>
     <string name="device_status_discovered">Discovered</string>
     <string name="device_status_connected">Connected</string>
+    <string name="search_devices_hint">Filter devices…</string>
+    <string name="known_devices_header">Detected Devices</string>
+    <string name="unknown_devices_header">Unknown Devices (%1$d)</string>
+    <string name="unknown_device_name">Unknown device</string>
 
     <!-- Gateway Settings -->
     <string name="gateway_settings_button">SMS Gateway</string>

@@ -71,6 +71,17 @@ class BluetoothDiscoveryManager {
                         val rssi = intent.getShortExtra(BluetoothDevice.EXTRA_RSSI, 0)
                         device?.let { addDevice(it, rssi) }
                     }
+                    BluetoothDevice.ACTION_NAME_CHANGED -> {
+                        val device: BluetoothDevice? = try {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
+                            } else {
+                                @Suppress("DEPRECATION")
+                                intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
+                            }
+                        } catch (e: Exception) { null }
+                        device?.let { addDevice(it, 0) }
+                    }
                     BluetoothAdapter.ACTION_DISCOVERY_FINISHED -> {
                         Log.d(TAG, "Classic discovery finished, active=${_isDiscovering.value}")
                         if (_isDiscovering.value) {
@@ -125,11 +136,23 @@ class BluetoothDiscoveryManager {
             val address = device.address ?: return
             val name = try { device.name } catch (_: SecurityException) { null }
             Log.d(TAG, "Device found: $address name=$name rssi=$rssi")
+            val previousEntry = filter.get(address)
             val isNew = filter.addOrUpdate(address, name, rssi)
-            if (isNew) {
-                devicesByAddress[address] = device
+            devicesByAddress[address] = device
+            // Emit on new device OR when a previously unnamed device gets a name
+            val nameResolved = !isNew && previousEntry?.name == null && name != null
+            if (isNew || nameResolved) {
                 _devices.value = filter.getAll().mapNotNull { devicesByAddress[it.address] }
-                Log.d(TAG, "New device added. Total: ${_devices.value.size}")
+                if (isNew) Log.d(TAG, "New device added. Total: ${_devices.value.size}")
+                if (nameResolved) Log.d(TAG, "Name resolved for $address: $name")
+            }
+            // Trigger name resolution for unnamed devices via SDP fetch
+            if (name == null && isNew) {
+                try {
+                    device.fetchUuidsWithSdp()
+                    Log.d(TAG, "fetchUuidsWithSdp triggered for unnamed device $address")
+                } catch (_: SecurityException) { }
+                catch (_: Exception) { }
             }
         } catch (e: Exception) {
             logError("addDevice crashed", e)
@@ -207,6 +230,7 @@ class BluetoothDiscoveryManager {
             try {
                 val intentFilter = IntentFilter().apply {
                     addAction(BluetoothDevice.ACTION_FOUND)
+                    addAction(BluetoothDevice.ACTION_NAME_CHANGED)
                     addAction(BluetoothAdapter.ACTION_DISCOVERY_FINISHED)
                 }
                 // ContextCompat safely handles RECEIVER_EXPORTED across all API levels

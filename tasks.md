@@ -581,3 +581,26 @@ blocks it. Also no location service check for API < 31.
 
 ### 44.7 - Build, test, release
 - [x] 44.7.1 All 481 tests pass; APK builds; push to GitHub; tag v2.2.0; release workflow running
+
+## Phase 45: BT Device Filter + Fuzzy Search + Fast Impersonation
+
+### 45.1 - Fuzzy search filter above device list
+- [x] 45.1.1 Add `OutlinedTextField` with search icon above device list; fuzzy-match device names (subsequence match); also match MAC addresses
+  - **Test:** `grep -c "fuzzyMatch" DeviceListScreen.kt` returns ≥1; `grep "OutlinedTextField" DeviceListScreen.kt` returns match
+
+### 45.2 - Known/Unknown device split
+- [x] 45.2.1 Partition devices by name presence; show "Detected Devices" section for named, collapsible "Unknown Devices (N)" for unnamed; default collapsed with AnimatedVisibility
+  - **Test:** `grep -c "knownDevices\|unknownDevices\|unknownExpanded" DeviceListScreen.kt` returns ≥3
+
+### 45.3 - Improved name retrieval
+- [x] 45.3.1 Emit StateFlow update when previously unnamed device gets a name (not just on new devices); add `ACTION_NAME_CHANGED` to BroadcastReceiver IntentFilter
+  - **Test:** `grep "ACTION_NAME_CHANGED" BluetoothDiscoveryManager.kt` returns match; `grep "nameResolved" BluetoothDiscoveryManager.kt` returns match
+- [x] 45.3.2 Call `fetchUuidsWithSdp()` on new unnamed devices to trigger SDP name resolution
+  - **Test:** `grep "fetchUuidsWithSdp" BluetoothDiscoveryManager.kt` returns match
+
+### 45.4 - Fire-and-forget impersonation
+- [x] 45.4.1 After `createBond()`, wait 500ms then `cancelBondProcess()` to auto-cancel pairing dialog; reduce cycle delay from 2000ms to 800ms for fast iteration
+  - **Test:** `grep "BOND_FIRE_DELAY_MS" BluetoothPairingSpammer.kt` returns match; `grep "cancelBond" BluetoothPairingSpammer.kt` returns ≥2
+
+### 45.5 - Build, test, release
+- [x] 45.5.1 All 483 tests pass; APK builds; push to GitHub; tag v2.3.0

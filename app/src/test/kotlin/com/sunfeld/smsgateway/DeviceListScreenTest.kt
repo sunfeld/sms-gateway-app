@@ -290,7 +290,7 @@ class DeviceListScreenTest {
     fun `DeviceListScreen uses Column with forEach for NestedScrollView compatibility`() {
         val content = File(SOURCE_DIR, "DeviceListScreen.kt").readText()
         assertTrue("Should use Column forEach (not LazyColumn — crashes with infinite height in NestedScrollView)",
-            content.contains("uniqueDevices.forEach"))
+            content.contains("filteredKnown.forEach") || content.contains("filteredUnknown.forEach"))
     }
 
     @Test
