@@ -3,15 +3,15 @@ package com.sunfeld.smsgateway
 import android.net.Uri
 import android.os.Bundle
 import android.widget.Toast
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.livedata.observeAsState
 
-class BluetoothHidActivity : ComponentActivity() {
+class BluetoothHidActivity : AppCompatActivity() {
 
     private val viewModel: BluetoothHidViewModel by viewModels()
     private lateinit var btPermissionManager: BluetoothPermissionManager
