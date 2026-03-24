@@ -10,8 +10,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
@@ -31,7 +29,11 @@ import kotlinx.coroutines.flow.StateFlow
 
 /**
  * Composable screen that collects the discovery [StateFlow] and renders
- * a [LazyColumn] of device cards with unique MAC address filtering.
+ * device cards with unique MAC address filtering.
+ *
+ * Uses Column (not LazyColumn) because this is embedded inside a
+ * NestedScrollView which provides infinite height constraints —
+ * LazyColumn crashes with infinite height.
  */
 @Composable
 fun DeviceListScreen(
@@ -44,36 +46,30 @@ fun DeviceListScreen(
     val isScanning by isScanningFlow.collectAsStateWithLifecycle()
     val selectedTargets by selectedTargetsFlow.collectAsStateWithLifecycle()
 
-    // Unique MAC address filtering — deduplicate by address
     val uniqueDevices = devices.distinctBy { it.address }
 
-    Column(modifier = Modifier.fillMaxWidth()) {
+    Column(
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
         if (isScanning && uniqueDevices.isEmpty()) {
             ScanningIndicator()
         } else if (!isScanning && uniqueDevices.isEmpty()) {
             EmptyStateNoDevices()
         } else {
-            LazyColumn(
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                items(
-                    items = uniqueDevices,
-                    key = { it.address }
-                ) { device ->
-                    DeviceCard(
-                        device = device,
-                        isSelected = selectedTargets.contains(device.address),
-                        onToggleSelection = { selected ->
-                            val updated = if (selected) {
-                                selectedTargets + device.address
-                            } else {
-                                selectedTargets - device.address
-                            }
-                            onSelectionChanged(updated)
+            uniqueDevices.forEach { device ->
+                DeviceCard(
+                    device = device,
+                    isSelected = selectedTargets.contains(device.address),
+                    onToggleSelection = { selected ->
+                        val updated = if (selected) {
+                            selectedTargets + device.address
+                        } else {
+                            selectedTargets - device.address
                         }
-                    )
-                }
+                        onSelectionChanged(updated)
+                    }
+                )
             }
         }
     }

@@ -287,10 +287,10 @@ class DeviceListScreenTest {
     }
 
     @Test
-    fun `DeviceListScreen uses LazyColumn with address as key`() {
+    fun `DeviceListScreen uses Column with forEach for NestedScrollView compatibility`() {
         val content = File(SOURCE_DIR, "DeviceListScreen.kt").readText()
-        assertTrue("Should use LazyColumn", content.contains("LazyColumn("))
-        assertTrue("Should key items by address", content.contains("key = { it.address }"))
+        assertTrue("Should use Column forEach (not LazyColumn — crashes with infinite height in NestedScrollView)",
+            content.contains("uniqueDevices.forEach"))
     }
 
     @Test
