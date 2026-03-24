@@ -1,246 +1,138 @@
 package com.sunfeld.smsgateway
 
+import android.net.Uri
 import android.os.Bundle
-import android.view.View
-import android.widget.ArrayAdapter
 import android.widget.Toast
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
-import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.ui.platform.ComposeView
-import androidx.compose.ui.platform.ViewCompositionStrategy
-import androidx.core.widget.doAfterTextChanged
-import com.google.android.material.button.MaterialButton
-import com.google.android.material.textfield.MaterialAutoCompleteTextView
-import com.google.android.material.textfield.TextInputEditText
-import com.google.android.material.textview.MaterialTextView
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.livedata.observeAsState
 
-class BluetoothHidActivity : AppCompatActivity() {
-
-    private lateinit var spinnerProfile: MaterialAutoCompleteTextView
-    private lateinit var editDeviceName: TextInputEditText
-    private lateinit var editPayload: TextInputEditText
-    private lateinit var btnScan: MaterialButton
-    private lateinit var btnStartStop: MaterialButton
-    private lateinit var btnSavePreset: MaterialButton
-    private lateinit var btnLoadPreset: MaterialButton
-    private lateinit var txtStatus: MaterialTextView
-    private lateinit var txtScanStatus: MaterialTextView
-    private lateinit var txtPacketsSentCount: MaterialTextView
-    private lateinit var txtDevicesTargetedCount: MaterialTextView
-    private lateinit var txtDevicesHeader: MaterialTextView
-    private lateinit var composeDeviceList: ComposeView
+class BluetoothHidActivity : ComponentActivity() {
 
     private val viewModel: BluetoothHidViewModel by viewModels()
-    private var isRunning = false
-
     private lateinit var btPermissionManager: BluetoothPermissionManager
+
+    private val imagePicker = registerForActivityResult(ActivityResultContracts.GetContent()) { uri: Uri? ->
+        uri ?: return@registerForActivityResult
+        handleImagePicked(uri)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_bluetooth_stress_test)
 
         btPermissionManager = BluetoothPermissionManager(this)
 
-        bindViews()
-        setupProfileDropdown()
-        setupDeviceList()
-        setupButtons()
-        observeViewModel()
-    }
+        // Ensure default payloads exist
+        PayloadRepository.ensureDefaults(this)
 
-    private fun bindViews() {
-        spinnerProfile = findViewById(R.id.spinnerProfile)
-        editDeviceName = findViewById(R.id.editDeviceName)
-        editPayload = findViewById(R.id.editPayload)
-        btnScan = findViewById(R.id.btnScan)
-        btnStartStop = findViewById(R.id.btnStartStop)
-        btnSavePreset = findViewById(R.id.btnSavePreset)
-        btnLoadPreset = findViewById(R.id.btnLoadPreset)
-        txtStatus = findViewById(R.id.txtStatus)
-        txtScanStatus = findViewById(R.id.txtScanStatus)
-        txtPacketsSentCount = findViewById(R.id.txtPacketsSentCount)
-        txtDevicesTargetedCount = findViewById(R.id.txtDevicesTargetedCount)
-        txtDevicesHeader = findViewById(R.id.txtDevicesHeader)
-        composeDeviceList = findViewById(R.id.composeDeviceList)
-    }
+        setContent {
+            MaterialTheme {
+                val hidState by viewModel.state.observeAsState(HidState.Idle)
 
-    private fun setupProfileDropdown() {
-        val profiles = DeviceProfiles.ALL
-        val names = profiles.map { it.displayName }
-        val adapter = ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, names)
-        spinnerProfile.setAdapter(adapter)
-
-        // Set default
-        spinnerProfile.setText(DeviceProfiles.DEFAULT.displayName, false)
-        editDeviceName.setText(DeviceProfiles.DEFAULT.sdpName)
-
-        spinnerProfile.setOnItemClickListener { _, _, position, _ ->
-            val profile = profiles[position]
-            viewModel.selectedProfile.value = profile
-            editDeviceName.setText(profile.sdpName)
-            viewModel.customDeviceName.value = profile.sdpName
-        }
-
-        editDeviceName.doAfterTextChanged { text ->
-            viewModel.customDeviceName.value = text?.toString() ?: ""
-        }
-
-        editPayload.doAfterTextChanged { text ->
-            viewModel.payload.value = text?.toString() ?: ""
-        }
-    }
-
-    private fun setupDeviceList() {
-        composeDeviceList.apply {
-            setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
-            setContent {
-                MaterialTheme {
-                    DeviceListScreen(
-                        devicesFlow = viewModel.discoveredDevicesFlow,
-                        isScanningFlow = viewModel.isScanningFlow,
-                        selectedTargetsFlow = viewModel.selectedTargetsFlow,
-                        onSelectionChanged = { targets ->
-                            viewModel.updateSelectedTargets(targets)
-                        }
-                    )
-                }
-            }
-        }
-    }
-
-    private fun setupButtons() {
-        btnScan.setOnClickListener {
-            val scanning = viewModel.isScanning.value == true
-            if (scanning) {
-                viewModel.stopScan(this)
-            } else {
-                btPermissionManager.requestScanPermissions { viewModel.startScan(this) }
+                BluetoothScreen(
+                    viewModel = viewModel,
+                    hidState = hidState,
+                    onScanClick = { handleScanClick() },
+                    onStartStopClick = { handleStartStopClick(hidState) },
+                    onSavePreset = { SavePresetDialog.show(this@BluetoothHidActivity) },
+                    onLoadPreset = { LoadPresetDialog.show(this@BluetoothHidActivity) },
+                    onPickImage = { imagePicker.launch("image/*") },
+                    onSavePayload = { saveCurrentPayload() },
+                    onLoadPayload = { showLoadPayloadDialog() }
+                )
             }
         }
 
-        btnStartStop.setOnClickListener {
-            if (isRunning) {
-                viewModel.stopAttack(this)
-            } else {
-                val targets = viewModel.selectedTargets.value ?: emptySet()
-                if (targets.isEmpty()) {
-                    Toast.makeText(this, getString(R.string.no_devices_selected), Toast.LENGTH_SHORT).show()
-                    return@setOnClickListener
-                }
-                btPermissionManager.requestAllBluetoothPermissions { viewModel.startAttack(this) }
-            }
-        }
-
-        btnSavePreset.setOnClickListener {
-            SavePresetDialog.show(this)
-        }
-
-        btnLoadPreset.setOnClickListener {
-            LoadPresetDialog.show(this)
-        }
-    }
-
-    private fun observeViewModel() {
-        viewModel.state.observe(this) { updateUI(it) }
-
-        viewModel.isScanning.observe(this) { scanning ->
-            btnScan.text = getString(
-                if (scanning) R.string.scan_btn_stop_scan else R.string.scan_btn_scan
-            )
-            if (scanning) {
-                txtDevicesHeader.visibility = View.VISIBLE
-                txtScanStatus.visibility = View.VISIBLE
-                composeDeviceList.visibility = View.VISIBLE
-                txtScanStatus.text = getString(R.string.scan_status_scanning)
-            }
-            // Disable scan button during active HID impersonation
-            btnScan.isEnabled = !isRunning
-        }
-
-        viewModel.keystrokesSent.observe(this) { count ->
-            txtPacketsSentCount.text = formatCount(count)
-        }
-
-        viewModel.connectedCount.observe(this) { count ->
-            txtDevicesTargetedCount.text = count.toString()
-        }
-
-        viewModel.discoveredDevices.observe(this) { devices ->
-            val hasDevices = devices.isNotEmpty()
-            val scanning = viewModel.isScanning.value == true
-            txtDevicesHeader.visibility = if (hasDevices || scanning) View.VISIBLE else View.GONE
-            composeDeviceList.visibility = if (hasDevices || scanning) View.VISIBLE else View.GONE
-            if (hasDevices) {
-                txtScanStatus.text = getString(R.string.scan_status_found, devices.size)
-            }
-        }
-    }
-
-    private fun updateUI(state: HidState) {
-        when (state) {
-            is HidState.Idle -> {
-                isRunning = false
-                btnStartStop.text = getString(R.string.hid_btn_start)
-                btnStartStop.isEnabled = true
-                setConfigFieldsEnabled(true)
-                txtStatus.text = getString(R.string.attack_state_idle)
-            }
-            is HidState.Scanning -> {
-                isRunning = true
-                btnStartStop.text = getString(R.string.hid_btn_stop)
-                btnStartStop.isEnabled = true
-                setConfigFieldsEnabled(false)
-                txtStatus.text = getString(R.string.attack_state_scanning)
-            }
-            is HidState.Attacking -> {
-                isRunning = true
-                btnStartStop.text = getString(R.string.hid_btn_stop)
-                btnStartStop.isEnabled = true
-                setConfigFieldsEnabled(false)
-                txtStatus.text = getString(R.string.attack_state_attacking, state.connectedCount)
-            }
-            is HidState.Stopping -> {
-                isRunning = false
-                btnStartStop.text = getString(R.string.hid_btn_start)
-                btnStartStop.isEnabled = false
-                setConfigFieldsEnabled(false)
-                txtStatus.text = getString(R.string.attack_state_stopping)
-            }
-            is HidState.Error -> {
-                isRunning = false
-                btnStartStop.text = getString(R.string.hid_btn_start)
-                btnStartStop.isEnabled = true
-                setConfigFieldsEnabled(true)
-                txtStatus.text = getString(R.string.attack_state_error)
+        // Observe errors for Toast
+        viewModel.state.observe(this) { state ->
+            if (state is HidState.Error) {
                 Toast.makeText(this, state.message, Toast.LENGTH_LONG).show()
                 viewModel.dismissError()
             }
         }
     }
 
-    private fun setConfigFieldsEnabled(enabled: Boolean) {
-        spinnerProfile.isEnabled = enabled
-        editDeviceName.isEnabled = enabled
-        editPayload.isEnabled = enabled
-        btnSavePreset.isEnabled = enabled
-        btnLoadPreset.isEnabled = enabled
-        btnScan.isEnabled = enabled
+    private fun handleScanClick() {
+        val scanning = viewModel.isScanning.value == true
+        if (scanning) {
+            viewModel.stopScan(this)
+        } else {
+            btPermissionManager.requestScanPermissions { viewModel.startScan(this) }
+        }
     }
+
+    private fun handleStartStopClick(hidState: HidState) {
+        val isRunning = hidState is HidState.Attacking || hidState is HidState.Scanning
+        if (isRunning) {
+            viewModel.stopAttack(this)
+        } else {
+            val targets = viewModel.selectedTargets.value ?: emptySet()
+            if (targets.isEmpty()) {
+                Toast.makeText(this, getString(R.string.no_devices_selected), Toast.LENGTH_SHORT).show()
+                return
+            }
+            btPermissionManager.requestAllBluetoothPermissions { viewModel.startAttack(this) }
+        }
+    }
+
+    private fun handleImagePicked(uri: Uri) {
+        try {
+            val inputStream = contentResolver.openInputStream(uri) ?: return
+            val bytes = inputStream.readBytes()
+            inputStream.close()
+            val mimeType = contentResolver.getType(uri) ?: "image/jpeg"
+            val sizeKb = bytes.size / 1024
+            viewModel.setImageData(bytes, mimeType, "Image selected (${sizeKb}KB)")
+            Toast.makeText(this, "Image loaded (${sizeKb}KB)", Toast.LENGTH_SHORT).show()
+        } catch (e: Exception) {
+            Toast.makeText(this, "Failed to load image: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun saveCurrentPayload() {
+        val payload = viewModel.buildPayloadFromForm()
+        if (payload.name.isBlank()) {
+            Toast.makeText(this, "Payload name is required", Toast.LENGTH_SHORT).show()
+            return
+        }
+        PayloadRepository.save(this, payload)
+        Toast.makeText(this, getString(R.string.payload_saved), Toast.LENGTH_SHORT).show()
+    }
+
+    private fun showLoadPayloadDialog() {
+        val payloads = PayloadRepository.getAll(this)
+        if (payloads.isEmpty()) {
+            Toast.makeText(this, getString(R.string.no_payloads), Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val names = payloads.map { "${it.name} (${it.type.name})" }.toTypedArray()
+        com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+            .setTitle(getString(R.string.load_payload))
+            .setItems(names) { _, which ->
+                val selected = payloads[which]
+                viewModel.loadPayloadIntoForm(selected)
+                Toast.makeText(this, getString(R.string.payload_loaded), Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    // ---- Preset compatibility (used by SavePresetDialog / LoadPresetDialog) ----
 
     fun applyPreset(preset: HidPreset) {
         val profile = DeviceProfiles.findById(preset.profileId) ?: DeviceProfiles.DEFAULT
         viewModel.selectedProfile.value = profile
+        viewModel.selectedProfileFlow.value = profile
         viewModel.customDeviceName.value = preset.customDeviceName
+        viewModel.customDeviceNameFlow.value = preset.customDeviceName
         viewModel.payload.value = preset.payload
-
-        spinnerProfile.setText(profile.displayName, false)
-        editDeviceName.setText(preset.customDeviceName)
-        editPayload.setText(preset.payload)
-
-        // Pre-select target addresses via ViewModel StateFlow
+        viewModel.payloadTextFlow.value = preset.payload
         viewModel.updateSelectedTargets(preset.targetAddresses.toSet())
-
         Toast.makeText(this, getString(R.string.preset_loaded), Toast.LENGTH_SHORT).show()
     }
 
@@ -259,12 +151,4 @@ class BluetoothHidActivity : AppCompatActivity() {
         val targetAddresses: List<String>,
         val payload: String
     )
-
-    private fun formatCount(count: Int): String {
-        return when {
-            count >= 1_000_000 -> String.format("%.1fM", count / 1_000_000.0)
-            count >= 1_000 -> String.format("%.1fK", count / 1_000.0)
-            else -> count.toString()
-        }
-    }
 }

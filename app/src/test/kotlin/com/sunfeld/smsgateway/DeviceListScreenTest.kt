@@ -346,8 +346,8 @@ class DeviceListScreenTest {
     }
 
     @Test
-    fun `BluetoothHidActivity passes ViewModel flows to DeviceListScreen`() {
-        val content = File(SOURCE_DIR, "BluetoothHidActivity.kt").readText()
+    fun `BluetoothScreen passes ViewModel flows to DeviceListScreen`() {
+        val content = File(SOURCE_DIR, "BluetoothScreen.kt").readText()
         assertTrue(
             "Should pass discoveredDevicesFlow",
             content.contains("devicesFlow = viewModel.discoveredDevicesFlow")

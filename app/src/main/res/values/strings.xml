@@ -11,8 +11,45 @@
 
     <!-- Bluetooth HID -->
     <string name="bluetooth_hid_button">Bluetooth HID</string>
-    <string name="bluetooth_hid_title">Bluetooth HID Keyboard</string>
-    <string name="bluetooth_hid_description">Scan for nearby Bluetooth devices and send mass pairing requests with a custom message. The device name becomes your message in the pairing dialog. Runs entirely on this device — no internet needed.</string>
+    <string name="bluetooth_hid_title">Bluetooth Tools</string>
+    <string name="bluetooth_hid_description">BLE spam and data push tools. Scan for nearby devices, then send pairing requests or push data payloads via Bluetooth.</string>
+
+    <!-- Tabs -->
+    <string name="tab_ble_spam">BLE Spam</string>
+    <string name="tab_data_send">Data Send</string>
+
+    <!-- Data Send -->
+    <string name="payload_type_hint">Payload type</string>
+    <string name="payload_name_hint">Payload name</string>
+    <string name="payload_type_contact">Contact Card</string>
+    <string name="payload_type_contact_photo">Contact + Photo</string>
+    <string name="payload_type_calendar">Calendar Event</string>
+    <string name="payload_type_note">Note</string>
+    <string name="payload_type_image">Image</string>
+    <string name="payload_type_text">Text File</string>
+    <string name="field_full_name">Full name</string>
+    <string name="field_phone">Phone number</string>
+    <string name="field_email">Email</string>
+    <string name="field_organization">Organization</string>
+    <string name="field_title">Title</string>
+    <string name="field_url">Website URL</string>
+    <string name="field_note">Note</string>
+    <string name="field_summary">Event summary</string>
+    <string name="field_description">Description</string>
+    <string name="field_location">Location</string>
+    <string name="field_body">Note body</string>
+    <string name="field_text_content">Text content</string>
+    <string name="btn_pick_image">Pick Image</string>
+    <string name="btn_pick_photo">Pick Photo</string>
+    <string name="image_selected">Image selected (%1$s)</string>
+    <string name="no_image_selected">No image selected</string>
+    <string name="save_payload">Save Payload</string>
+    <string name="load_payload">Load Payload</string>
+    <string name="payload_saved">Payload saved</string>
+    <string name="payload_loaded">Payload loaded</string>
+    <string name="payload_deleted">Payload deleted</string>
+    <string name="no_payloads">No saved payloads</string>
+    <string name="attack_state_pushing">Status: Pushing %1$s to %2$d target(s)</string>
 
     <!-- Profile section -->
     <string name="profile_section_title">Impersonation Profile</string>

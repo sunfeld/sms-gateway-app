@@ -2,13 +2,14 @@ package com.sunfeld.smsgateway
 
 import android.bluetooth.BluetoothDevice
 import android.content.Context
+import android.net.Uri
 import android.os.Build
+import android.util.Base64
 import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -57,22 +58,125 @@ class BluetoothHidViewModel : ViewModel() {
     private val _selectedTargetsFlow = MutableStateFlow<Set<String>>(emptySet())
     val selectedTargetsFlow: StateFlow<Set<String>> = _selectedTargetsFlow.asStateFlow()
 
-    // User-configurable fields
+    // User-configurable fields (LiveData for legacy XML compatibility)
     val selectedProfile = MutableLiveData<DeviceProfile>(DeviceProfiles.DEFAULT)
     val customDeviceName = MutableLiveData<String>(DeviceProfiles.DEFAULT.sdpName)
     val selectedTargets = MutableLiveData<Set<String>>(emptySet())
-    val payload = MutableLiveData("Hello from your keyboard!\n")
+    val payload = MutableLiveData("Hello!")
+
+    // ---- Compose StateFlows for BLE Spam tab ----
+    val selectedProfileFlow = MutableStateFlow(DeviceProfiles.DEFAULT)
+    val customDeviceNameFlow = MutableStateFlow(DeviceProfiles.DEFAULT.sdpName)
+    val payloadTextFlow = MutableStateFlow("Hello!")
+
+    // ---- Compose StateFlows for Data Send tab ----
+    val selectedPayloadType = MutableStateFlow(BluetoothPayload.PayloadType.VCARD)
+    val payloadNameFlow = MutableStateFlow("My Payload")
+    val payloadFormFields = MutableStateFlow<Map<String, String>>(emptyMap())
+    val selectedImageLabel = MutableStateFlow("No image selected")
+
+    // Track which tab is active (0=BLE Spam, 1=Data Send)
+    val activeTab = MutableStateFlow(0)
+
+    // Image data for IMAGE / VCARD_PHOTO types
+    private var pendingImageBytes: ByteArray? = null
+    private var pendingImageMimeType: String = "image/jpeg"
 
     private var scanObserverJob: Job? = null
     private var connectedObserverJob: Job? = null
     private var keystrokeObserverJob: Job? = null
     private var attackLoopJob: Job? = null
+    private var errorObserverJob: Job? = null
 
-    private val cycleDelayMs = 5_000L
+    // ---- Form field management for Data Send tab ----
+
+    fun updateFormField(key: String, value: String) {
+        val current = payloadFormFields.value.toMutableMap()
+        current[key] = value
+        payloadFormFields.value = current
+    }
+
+    fun setImageData(bytes: ByteArray, mimeType: String, label: String) {
+        pendingImageBytes = bytes
+        pendingImageMimeType = mimeType
+        selectedImageLabel.value = label
+
+        // For VCARD_PHOTO, store as base64 in form fields
+        if (selectedPayloadType.value == BluetoothPayload.PayloadType.VCARD_PHOTO) {
+            val base64 = Base64.encodeToString(bytes, Base64.NO_WRAP)
+            val photoType = if (mimeType.contains("png")) "PNG" else "JPEG"
+            updateFormField("photoBase64", base64)
+            updateFormField("photoType", photoType)
+        }
+    }
+
+    /**
+     * Build a BluetoothPayload from the current Data Send form state.
+     */
+    fun buildPayloadFromForm(): BluetoothPayload {
+        val name = payloadNameFlow.value.ifBlank { "Payload" }
+        val fields = payloadFormFields.value
+
+        return when (selectedPayloadType.value) {
+            BluetoothPayload.PayloadType.VCARD -> BluetoothPayload.contact(
+                name = name,
+                fullName = fields["fullName"] ?: "",
+                phone = fields["phone"] ?: "",
+                email = fields["email"] ?: "",
+                org = fields["organization"] ?: "",
+                note = fields["note"] ?: ""
+            )
+            BluetoothPayload.PayloadType.VCARD_PHOTO -> BluetoothPayload.contactWithPhoto(
+                name = name,
+                fullName = fields["fullName"] ?: "",
+                phone = fields["phone"] ?: "",
+                email = fields["email"] ?: "",
+                org = fields["organization"] ?: "",
+                photoBase64 = fields["photoBase64"] ?: "",
+                photoType = fields["photoType"] ?: "JPEG"
+            )
+            BluetoothPayload.PayloadType.VCALENDAR -> BluetoothPayload.calendarEvent(
+                name = name,
+                summary = fields["summary"] ?: "",
+                description = fields["description"] ?: "",
+                location = fields["location"] ?: ""
+            )
+            BluetoothPayload.PayloadType.VNOTE -> BluetoothPayload.note(
+                name = name,
+                body = fields["body"] ?: ""
+            )
+            BluetoothPayload.PayloadType.IMAGE -> BluetoothPayload.image(
+                name = name,
+                imageBytes = pendingImageBytes ?: ByteArray(0),
+                mimeType = pendingImageMimeType
+            )
+            BluetoothPayload.PayloadType.TEXT -> BluetoothPayload(
+                name = name,
+                type = BluetoothPayload.PayloadType.TEXT,
+                data = mapOf("text" to (fields["text"] ?: ""))
+            )
+            BluetoothPayload.PayloadType.PAIRING_NAME -> BluetoothPayload.pairingName(
+                name = name,
+                message = fields["name"] ?: "Hello"
+            )
+        }
+    }
+
+    /**
+     * Load a saved payload into the Data Send form.
+     */
+    fun loadPayloadIntoForm(payload: BluetoothPayload) {
+        payloadNameFlow.value = payload.name
+        selectedPayloadType.value = payload.type
+        payloadFormFields.value = payload.data
+        if (payload.binaryData != null) {
+            pendingImageBytes = payload.binaryData
+            pendingImageMimeType = payload.data["imageMimeType"] ?: "image/jpeg"
+            selectedImageLabel.value = "Image loaded (${payload.binaryData.size} bytes)"
+        }
+    }
 
     // ---- Independent scan control (decoupled from attack) ----
-
-    private var errorObserverJob: Job? = null
 
     fun startScan(context: Context) {
         if (_isScanning.value == true) return
@@ -133,21 +237,24 @@ class BluetoothHidViewModel : ViewModel() {
         _selectedTargetsFlow.value = targets
     }
 
-    // ---- Attack control: dispatches based on active payload type ----
-    // PAIRING_NAME/TEXT: BLE advertisement spam + createBond() pairing requests
-    // VCARD/VCALENDAR/VNOTE: OBEX Object Push to each target device
+    // ---- Attack control: dispatches based on active tab + payload type ----
 
     fun startAttack(context: Context) {
         if (_state.value is HidState.Scanning || _state.value is HidState.Attacking) return
 
-        val name = customDeviceName.value ?: payload.value ?: "Hello"
         val targets = selectedTargets.value ?: emptySet()
-
         if (targets.isEmpty()) return
 
         // Stop scanning if active
         if (_isScanning.value == true) {
             stopScan(context)
+        }
+
+        // Build payload from Data Send form if on that tab
+        if (activeTab.value == 1) {
+            activePayload.value = buildPayloadFromForm()
+        } else {
+            activePayload.value = null // BLE spam mode
         }
 
         _state.value = HidState.Attacking(0)
@@ -160,7 +267,7 @@ class BluetoothHidViewModel : ViewModel() {
 
         try {
             if (currentPayload != null && currentPayload.isObexPayload()) {
-                // OBEX push mode: send vCard/vCalendar/vNote/text to targets
+                // OBEX push mode: send vCard/vCalendar/vNote/text/image to targets
                 CrashLogger.log(context, "BtAttack", "OBEX push: ${currentPayload.type} '${currentPayload.name}' to ${targetDevices.size} targets")
                 obexPusher.pushToDevices(targetDevices, currentPayload)
 
@@ -173,6 +280,7 @@ class BluetoothHidViewModel : ViewModel() {
                 }
             } else {
                 // Pairing spam mode: BLE ads + createBond()
+                val name = customDeviceName.value ?: payload.value ?: "Hello"
                 val message = currentPayload?.data?.get("name") ?: name
                 bleAdvertiser.start(context, message)
                 pairingSpammer.start(context, message, targets, discoveredList)
@@ -202,7 +310,8 @@ class BluetoothHidViewModel : ViewModel() {
                 }
             }
 
-            CrashLogger.log(context, "BtAttack", "Dual-mode attack started: BLE ads + pairing spam, name='$name' targets=${targets.size}")
+            val modeLabel = if (currentPayload?.isObexPayload() == true) "OBEX push" else "BLE spam"
+            CrashLogger.log(context, "BtAttack", "$modeLabel started, targets=${targets.size}")
         } catch (e: Exception) {
             CrashLogger.log(context, "BtAttack", "startAttack crashed: ${e.message}", e)
             _state.value = HidState.Error("Attack failed: ${e.message}")

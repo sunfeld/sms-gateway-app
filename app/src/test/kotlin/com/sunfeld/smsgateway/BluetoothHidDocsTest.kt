@@ -116,9 +116,9 @@ class BluetoothHidDocsTest {
     }
 
     @Test
-    fun `BluetoothHidActivity uses MaterialButton for start stop`() {
+    fun `BluetoothHidActivity handles start stop via Compose`() {
         val content = File(SOURCE_DIR, "BluetoothHidActivity.kt").readText()
-        assertTrue(content.contains("btnStartStop"))
+        assertTrue(content.contains("handleStartStopClick"))
     }
 
     @Test
@@ -128,25 +128,25 @@ class BluetoothHidDocsTest {
     }
 
     @Test
-    fun `BluetoothHidActivity handles all HidState variants`() {
-        val content = File(SOURCE_DIR, "BluetoothHidActivity.kt").readText()
-        assertTrue(content.contains("is HidState.Idle"))
-        assertTrue(content.contains("is HidState.Scanning"))
-        assertTrue(content.contains("is HidState.Attacking"))
-        assertTrue(content.contains("is HidState.Stopping"))
-        assertTrue(content.contains("is HidState.Error"))
+    fun `BluetoothScreen handles all HidState variants`() {
+        val content = File(SOURCE_DIR, "BluetoothScreen.kt").readText()
+        assertTrue(content.contains("HidState.Idle"))
+        assertTrue(content.contains("HidState.Scanning"))
+        assertTrue(content.contains("HidState.Attacking"))
+        assertTrue(content.contains("HidState.Stopping"))
+        assertTrue(content.contains("HidState.Error"))
     }
 
     @Test
-    fun `BluetoothHidActivity has profile dropdown`() {
-        val content = File(SOURCE_DIR, "BluetoothHidActivity.kt").readText()
-        assertTrue(content.contains("spinnerProfile"))
+    fun `BleSpamTab has profile dropdown`() {
+        val content = File(SOURCE_DIR, "BleSpamTab.kt").readText()
+        assertTrue(content.contains("ProfileDropdown"))
     }
 
     @Test
-    fun `BluetoothHidActivity has device name editor`() {
-        val content = File(SOURCE_DIR, "BluetoothHidActivity.kt").readText()
-        assertTrue(content.contains("editDeviceName"))
+    fun `BleSpamTab has device name editor`() {
+        val content = File(SOURCE_DIR, "BleSpamTab.kt").readText()
+        assertTrue(content.contains("customDeviceName"))
     }
 
     @Test
@@ -162,10 +162,27 @@ class BluetoothHidDocsTest {
     }
 
     @Test
-    fun `BluetoothHidActivity uses ComposeView for device list`() {
-        val content = File(SOURCE_DIR, "BluetoothHidActivity.kt").readText()
-        assertTrue(content.contains("ComposeView"))
+    fun `BluetoothScreen uses Compose DeviceListScreen`() {
+        val content = File(SOURCE_DIR, "BluetoothScreen.kt").readText()
         assertTrue(content.contains("DeviceListScreen"))
+    }
+
+    @Test
+    fun `BluetoothScreen has tabbed UI with BLE Spam and Data Send`() {
+        val content = File(SOURCE_DIR, "BluetoothScreen.kt").readText()
+        assertTrue(content.contains("TabRow"))
+        assertTrue(content.contains("BleSpamTab"))
+        assertTrue(content.contains("DataSendTab"))
+    }
+
+    @Test
+    fun `DataSendTab has payload type selector`() {
+        val content = File(SOURCE_DIR, "DataSendTab.kt").readText()
+        assertTrue(content.contains("PayloadTypeDropdown"))
+        assertTrue(content.contains("VCARD"))
+        assertTrue(content.contains("VCALENDAR"))
+        assertTrue(content.contains("VNOTE"))
+        assertTrue(content.contains("IMAGE"))
     }
 
     // ---- No external BT endpoints ----
