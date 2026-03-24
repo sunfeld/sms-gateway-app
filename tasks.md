@@ -657,5 +657,5 @@ blocks it. Also no location service check for API < 31.
   - **Test:** `JAVA_HOME=/home/linuxbrew/.linuxbrew/opt/openjdk@17 ./gradlew testDebugUnitTest --tests "*.HidPairingSpammerTest"` passes
 
 ### 47.4 - Build, test, release
-- [ ] 47.4.1 All tests pass; APK builds; push to GitHub; tag v2.4.0; release workflow succeeds
-  - **Test:** `JAVA_HOME=/home/linuxbrew/.linuxbrew/opt/openjdk@17 ./gradlew assembleDebug` exits 0; `git tag v2.4.0` exists; GitHub release created
+- [x] 47.4.1 All 497 tests pass; APK builds; push to GitHub; tag v2.4.1; release workflow running
+  - **Test:** `JAVA_HOME=/home/linuxbrew/.linuxbrew/opt/openjdk@17 ./gradlew assembleDebug` exits 0; `git tag v2.4.1` exists; GitHub release created
