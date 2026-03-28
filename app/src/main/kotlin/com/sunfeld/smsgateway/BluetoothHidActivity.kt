@@ -39,6 +39,7 @@ class BluetoothHidActivity : AppCompatActivity() {
                     onScanClick = { handleScanClick() },
                     onStartStopClick = { handleStartStopClick(hidState) },
                     onCrayModeClick = { handleCrayModeClick() },
+                    onAutoAssaultClick = { handleAutoAssaultClick() },
                     onSavePreset = { SavePresetDialog.show(this@BluetoothHidActivity) },
                     onLoadPreset = { LoadPresetDialog.show(this@BluetoothHidActivity) },
                     onPickImage = { imagePicker.launch("image/*") },
@@ -72,6 +73,16 @@ class BluetoothHidActivity : AppCompatActivity() {
         } else {
             btPermissionManager.requestAllBluetoothPermissions {
                 viewModel.startCrayMode(this)
+            }
+        }
+    }
+
+    private fun handleAutoAssaultClick() {
+        if (viewModel.isAutoAssault.value) {
+            viewModel.stopAutoAssault(this)
+        } else {
+            btPermissionManager.requestAllBluetoothPermissions {
+                viewModel.startAutoAssault(this)
             }
         }
     }

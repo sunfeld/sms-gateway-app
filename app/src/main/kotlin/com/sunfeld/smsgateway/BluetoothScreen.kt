@@ -47,6 +47,7 @@ fun BluetoothScreen(
     onScanClick: () -> Unit,
     onStartStopClick: () -> Unit,
     onCrayModeClick: () -> Unit,
+    onAutoAssaultClick: () -> Unit,
     onSavePreset: () -> Unit,
     onLoadPreset: () -> Unit,
     onPickImage: () -> Unit,
@@ -60,6 +61,9 @@ fun BluetoothScreen(
     val crayDuration by viewModel.crayDuration.collectAsStateWithLifecycle()
     val confirmed by viewModel.confirmedHits.collectAsStateWithLifecycle()
     val skipped by viewModel.skippedTargets.collectAsStateWithLifecycle()
+    val isAutoAssault by viewModel.isAutoAssault.collectAsStateWithLifecycle()
+    val assaultTarget by viewModel.currentAssaultTarget.collectAsStateWithLifecycle()
+    val assaultProfile by viewModel.currentAssaultProfile.collectAsStateWithLifecycle()
     val isRunning = hidState is HidState.Attacking || hidState is HidState.Scanning || hidState is HidState.CrayMode
 
     val selectedTab by viewModel.activeTab.collectAsStateWithLifecycle()
@@ -79,6 +83,19 @@ fun BluetoothScreen(
             text = stringResource(R.string.bluetooth_hid_description),
             style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier.padding(top = 8.dp)
+        )
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // ---- KEYBOARD ASSAULT (BLE HID) ----
+        KeyboardAssaultCard(
+            isActive = isAutoAssault,
+            confirmedCount = confirmed,
+            connectionCount = connectedCount,
+            currentProfile = assaultProfile,
+            lastEvent = assaultTarget,
+            enabled = !isRunning || isAutoAssault,
+            onAssaultClick = onAutoAssaultClick
         )
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -196,6 +213,133 @@ fun BluetoothScreen(
             skipped = skipped,
             targetsCount = connectedCount
         )
+    }
+}
+
+@Composable
+private fun KeyboardAssaultCard(
+    isActive: Boolean,
+    confirmedCount: Int,
+    connectionCount: Int,
+    currentProfile: String?,
+    lastEvent: String?,
+    enabled: Boolean,
+    onAssaultClick: () -> Unit
+) {
+    val cardColor = if (isActive) Color(0xFF1A237E) else MaterialTheme.colorScheme.primaryContainer
+    val textColor = if (isActive) Color.White else MaterialTheme.colorScheme.onPrimaryContainer
+
+    val pulseAlpha = if (isActive) {
+        val transition = rememberInfiniteTransition(label = "kb_pulse")
+        val alpha by transition.animateFloat(
+            initialValue = 0.7f, targetValue = 1.0f,
+            animationSpec = infiniteRepeatable(tween(600), RepeatMode.Reverse),
+            label = "kb_alpha"
+        )
+        alpha
+    } else 1f
+
+    Card(
+        modifier = Modifier.fillMaxWidth().alpha(pulseAlpha),
+        colors = CardDefaults.cardColors(containerColor = cardColor),
+        elevation = CardDefaults.cardElevation(defaultElevation = if (isActive) 8.dp else 2.dp)
+    ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
+            Text(
+                text = if (isActive) "KEYBOARD ACTIVE" else "KEYBOARD ASSAULT",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Black,
+                color = textColor
+            )
+
+            if (!isActive) {
+                Text(
+                    text = "BLE HID keyboard — targets iPhones + Android",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = textColor,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            if (isActive) {
+                // Live stats
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = confirmedCount.toString(),
+                            style = MaterialTheme.typography.displaySmall,
+                            fontWeight = FontWeight.Black,
+                            color = Color(0xFF00E676) // Green
+                        )
+                        Text("CONFIRMED", style = MaterialTheme.typography.labelSmall, color = textColor)
+                    }
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            text = connectionCount.toString(),
+                            style = MaterialTheme.typography.displaySmall,
+                            fontWeight = FontWeight.Bold,
+                            color = textColor
+                        )
+                        Text("PROBING", style = MaterialTheme.typography.labelSmall, color = textColor)
+                    }
+                }
+
+                // Current profile
+                currentProfile?.let { profile ->
+                    Text(
+                        text = "Advertising as: $profile",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = textColor.copy(alpha = 0.8f),
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                }
+
+                // Last event
+                lastEvent?.let { event ->
+                    Text(
+                        text = event,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFF00E676),
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Button(
+                    onClick = onAssaultClick,
+                    modifier = Modifier.fillMaxWidth().height(48.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color.White,
+                        contentColor = Color(0xFF1A237E)
+                    )
+                ) {
+                    Text("STOP", fontWeight = FontWeight.Black)
+                }
+            } else {
+                Button(
+                    onClick = onAssaultClick,
+                    enabled = enabled,
+                    modifier = Modifier.fillMaxWidth().height(56.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF1A237E),
+                        contentColor = Color.White
+                    )
+                ) {
+                    Text(
+                        "START KEYBOARD",
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Black
+                    )
+                }
+            }
+        }
     }
 }
 

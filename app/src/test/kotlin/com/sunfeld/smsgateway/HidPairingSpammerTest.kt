@@ -1,7 +1,6 @@
 package com.sunfeld.smsgateway
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -26,7 +25,6 @@ class HidPairingSpammerTest {
 
     @Test
     fun `KEYBOARD_PROFILES contains all DeviceProfiles`() {
-        // HidPairingSpammer should rotate through ALL keyboard profiles
         val sourceFile = File(SOURCE_DIR, "HidPairingSpammer.kt")
         assertTrue("HidPairingSpammer.kt must exist", sourceFile.exists())
         val content = sourceFile.readText()
@@ -53,30 +51,18 @@ class HidPairingSpammerTest {
     // ---- Timing constant tests ----
 
     @Test
-    fun `DIALOG_DWELL_MS is long enough for PIN dialog to render`() {
-        // PIN pairing dialog needs at least 1.5s to fully render on most devices
+    fun `TARGET_TIMEOUT_MS is long enough for target to respond`() {
         assertTrue(
-            "DIALOG_DWELL_MS should be >= 1500ms",
-            HidPairingSpammer.DIALOG_DWELL_MS >= 1500L
+            "TARGET_TIMEOUT_MS should be >= 3000ms",
+            HidPairingSpammer.TARGET_TIMEOUT_MS >= 3000L
         )
     }
 
     @Test
-    fun `TARGET_CYCLE_MS allows brief settle between targets`() {
-        assertTrue(
-            "TARGET_CYCLE_MS should be >= 100ms for settle time",
-            HidPairingSpammer.TARGET_CYCLE_MS >= 100L
-        )
-    }
-
-    @Test
-    fun `total cycle time per target is reasonable`() {
-        // Each target: dwell + cycle = total time before next target
-        val totalPerTarget = HidPairingSpammer.DIALOG_DWELL_MS + HidPairingSpammer.TARGET_CYCLE_MS
-        assertTrue(
-            "Total cycle per target should be <= 5000ms to keep attack flowing",
-            totalPerTarget <= 5000L
-        )
+    fun `REHIT_COOLDOWN prevents hammering same device`() {
+        val sourceFile = File(SOURCE_DIR, "HidPairingSpammer.kt")
+        val content = sourceFile.readText()
+        assertTrue("Must have REHIT_COOLDOWN_MS", content.contains("REHIT_COOLDOWN_MS"))
     }
 
     // ---- Source code structural tests ----
@@ -101,7 +87,7 @@ class HidPairingSpammerTest {
     }
 
     @Test
-    fun `HidPairingSpammer cancels bond after dwell`() {
+    fun `HidPairingSpammer cancels bond after confirmation`() {
         val sourceFile = File(SOURCE_DIR, "HidPairingSpammer.kt")
         val content = sourceFile.readText()
         assertTrue("Must call cancelBondProcess", content.contains("cancelBondProcess"))
@@ -123,27 +109,30 @@ class HidPairingSpammerTest {
         val sourceFile = File(SOURCE_DIR, "HidPairingSpammer.kt")
         val content = sourceFile.readText()
         assertTrue("Must save originalAdapterName", content.contains("originalAdapterName"))
-        // Check restore logic exists in stop()
         assertTrue("Must restore name in stop()", content.contains("adapter?.setName(name)"))
     }
 
     @Test
-    fun `HidPairingSpammer is wired into BluetoothHidViewModel`() {
-        val vmFile = File(SOURCE_DIR, "BluetoothHidViewModel.kt")
-        val content = vmFile.readText()
-        assertTrue("ViewModel must reference hidPairingSpammer", content.contains("hidPairingSpammer"))
-        assertTrue("Must start hidPairingSpammer in cray mode", content.contains("hidPairingSpammer?.start("))
-        assertTrue("Must stop hidPairingSpammer", content.contains("hidPairingSpammer?.stop("))
+    fun `HidPairingSpammer supports dynamic target updates`() {
+        val sourceFile = File(SOURCE_DIR, "HidPairingSpammer.kt")
+        val content = sourceFile.readText()
+        assertTrue("Must have updateTargets method", content.contains("fun updateTargets"))
     }
 
     @Test
-    fun `HidPairingSpammer counter is included in Cray Mode total`() {
-        val vmFile = File(SOURCE_DIR, "BluetoothHidViewModel.kt")
-        val content = vmFile.readText()
-        assertTrue(
-            "hitCount must be included in combined counter",
-            content.contains("hidHits()")  || content.contains("hitCount")
-        )
+    fun `HidPairingSpammer tracks confirmed and skipped counts`() {
+        val sourceFile = File(SOURCE_DIR, "HidPairingSpammer.kt")
+        val content = sourceFile.readText()
+        assertTrue("Must track confirmedCount", content.contains("_hitCount"))
+        assertTrue("Must track skippedCount", content.contains("_skippedCount"))
+    }
+
+    @Test
+    fun `HidPairingSpammer uses CompletableDeferred for event-driven confirmation`() {
+        val sourceFile = File(SOURCE_DIR, "HidPairingSpammer.kt")
+        val content = sourceFile.readText()
+        assertTrue("Must use CompletableDeferred", content.contains("CompletableDeferred"))
+        assertTrue("Must use pairingDeferred", content.contains("pairingDeferred"))
     }
 
     @Test
@@ -154,5 +143,52 @@ class HidPairingSpammerTest {
             "Must use HidKeyReport.KEYBOARD_DESCRIPTOR for authentic HID registration",
             content.contains("HidKeyReport.KEYBOARD_DESCRIPTOR")
         )
+    }
+
+    // ---- BLE HID Keyboard Server tests ----
+
+    @Test
+    fun `BleHidKeyboardServer exists and uses BluetoothGattServer`() {
+        val sourceFile = File(SOURCE_DIR, "BleHidKeyboardServer.kt")
+        assertTrue("BleHidKeyboardServer.kt must exist", sourceFile.exists())
+        val content = sourceFile.readText()
+        assertTrue("Must use BluetoothGattServer", content.contains("BluetoothGattServer"))
+        assertTrue("Must use openGattServer", content.contains("openGattServer"))
+    }
+
+    @Test
+    fun `BleHidKeyboardServer serves HID service with required characteristics`() {
+        val sourceFile = File(SOURCE_DIR, "BleHidKeyboardServer.kt")
+        val content = sourceFile.readText()
+        assertTrue("Must have HID Service UUID 0x1812", content.contains("00001812"))
+        assertTrue("Must have Report Map characteristic", content.contains("REPORT_MAP_UUID"))
+        assertTrue("Must have HID Information characteristic", content.contains("HID_INFORMATION_UUID"))
+        assertTrue("Must have Report characteristic", content.contains("REPORT_UUID"))
+        assertTrue("Must have Protocol Mode characteristic", content.contains("PROTOCOL_MODE_UUID"))
+    }
+
+    @Test
+    fun `BleHidKeyboardServer includes Device Information and Battery services`() {
+        val sourceFile = File(SOURCE_DIR, "BleHidKeyboardServer.kt")
+        val content = sourceFile.readText()
+        assertTrue("Must have DIS UUID 0x180A", content.contains("0000180A"))
+        assertTrue("Must have Battery UUID 0x180F", content.contains("0000180F"))
+    }
+
+    @Test
+    fun `BleHidKeyboardServer uses keyboard HID descriptor`() {
+        val sourceFile = File(SOURCE_DIR, "BleHidKeyboardServer.kt")
+        val content = sourceFile.readText()
+        assertTrue("Must serve HidKeyReport.KEYBOARD_DESCRIPTOR in GATT reads",
+            content.contains("HidKeyReport.KEYBOARD_DESCRIPTOR"))
+    }
+
+    @Test
+    fun `ViewModel wires BleHidKeyboardServer into auto assault`() {
+        val vmFile = File(SOURCE_DIR, "BluetoothHidViewModel.kt")
+        val content = vmFile.readText()
+        assertTrue("Must reference bleHidServer", content.contains("bleHidServer"))
+        assertTrue("Must start bleHidServer in auto assault", content.contains("bleHidServer.start("))
+        assertTrue("Must stop bleHidServer", content.contains("bleHidServer.stop("))
     }
 }
