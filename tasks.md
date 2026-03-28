@@ -659,3 +659,27 @@ blocks it. Also no location service check for API < 31.
 ### 47.4 - Build, test, release
 - [x] 47.4.1 All 497 tests pass; APK builds; push to GitHub; tag v2.4.1; release workflow running
   - **Test:** `JAVA_HOME=/home/linuxbrew/.linuxbrew/opt/openjdk@17 ./gradlew assembleDebug` exits 0; `git tag v2.4.1` exists; GitHub release created
+
+---
+
+## Phase 48: Precision Pairing — Event-Driven Hit Confirmation
+
+**Problem:** The pairing spammer fires `createBond()` blindly and counts every attempt as a "hit" — no way to know if the target actually showed a dialog. BLE advertisement spam counter inflates the total further. This makes the hit counter meaningless and wastes cycles on unresponsive devices.
+
+**Solution:** Rewrite `BluetoothPairingSpammer` to use `ACTION_PAIRING_REQUEST` BroadcastReceiver as a confirmation signal. Each target gets a timeout window; if the pairing request callback fires, it's a **confirmed hit** (target is showing the dialog). If not, it's **skipped**. Configurable dwell time controls how long the dialog stays visible before canceling the bond. UI updated to show confirmed/skipped split instead of raw broadcast count.
+
+### 48.1 - Rewrite BluetoothPairingSpammer with event-driven confirmation
+- [x] 48.1.1 Replace fire-and-forget `createBond()` loop with per-target flow: bond → `CompletableDeferred` awaits `ACTION_PAIRING_REQUEST` → confirmed/skipped tracking; register for both `ACTION_PAIRING_REQUEST` (high priority) and `ACTION_BOND_STATE_CHANGED`; add `confirmedCount`, `skippedCount`, `totalAttempts`, `currentTarget` StateFlows; configurable `targetTimeoutMs` and `dwellMs`; pairing variant logging (PIN/PASSKEY/NUMERIC_COMPARISON/CONSENT)
+  - **Test:** `grep -c "confirmedCount\|skippedCount\|ACTION_PAIRING_REQUEST\|CompletableDeferred" BluetoothPairingSpammer.kt` returns ≥4
+
+### 48.2 - Wire precision counters into BluetoothHidViewModel
+- [x] 48.2.1 Add `confirmedHits`, `skippedTargets`, `dwellTimeMs` StateFlows to ViewModel; replace BLE advertiser counter observers with `pairingSpammer.confirmedCount`/`skippedCount` observers; remove `bleAdvertiser` from normal pairing mode and Cray Mode vector 2; simplify Cray Mode counter aggregation to confirmed + HID hits; reduce OBEX re-push interval from 8s to 12s
+  - **Test:** `grep -c "confirmedHits\|skippedTargets\|dwellTimeMs" BluetoothHidViewModel.kt` returns ≥3; `grep "bleAdvertiser.start" BluetoothHidViewModel.kt` returns 0 matches in attack paths
+
+### 48.3 - Update BluetoothScreen UI for confirmed/skipped display
+- [x] 48.3.1 Replace single broadcast counter with confirmed/skipped split in `CounterCard`; update `CrayModeCard` to show "CONFIRMED" label instead of "HITS"; update status text to "Pairing with N target(s)"; remove unused `keystrokesSent` variable
+  - **Test:** `grep -c "confirmed\|skipped" BluetoothScreen.kt` returns ≥4; build produces zero warnings
+
+### 48.4 - Build and test
+- [x] 48.4.1 Debug APK builds with zero warnings; all unit tests pass
+  - **Test:** `JAVA_HOME=/home/linuxbrew/.linuxbrew/opt/openjdk@17 ./gradlew assembleDebug` exits 0 with no warnings; `./gradlew testDebugUnitTest` passes

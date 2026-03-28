@@ -54,11 +54,12 @@ fun BluetoothScreen(
     onLoadPayload: () -> Unit
 ) {
     val isScanning by viewModel.isScanningFlow.collectAsStateWithLifecycle()
-    val keystrokesSent by viewModel.keystrokesSent.observeAsState(0)
     val connectedCount by viewModel.connectedCount.observeAsState(0)
     val isCray by viewModel.isCrayMode.collectAsStateWithLifecycle()
     val craySeconds by viewModel.craySecondsRemaining.collectAsStateWithLifecycle()
     val crayDuration by viewModel.crayDuration.collectAsStateWithLifecycle()
+    val confirmed by viewModel.confirmedHits.collectAsStateWithLifecycle()
+    val skipped by viewModel.skippedTargets.collectAsStateWithLifecycle()
     val isRunning = hidState is HidState.Attacking || hidState is HidState.Scanning || hidState is HidState.CrayMode
 
     val selectedTab by viewModel.activeTab.collectAsStateWithLifecycle()
@@ -88,7 +89,7 @@ fun BluetoothScreen(
             secondsRemaining = craySeconds,
             duration = crayDuration,
             targetsCount = connectedCount,
-            broadcastCount = keystrokesSent,
+            confirmedCount = confirmed,
             enabled = !isRunning || isCray,
             onDurationSelected = { viewModel.crayDuration.value = it },
             onCrayClick = onCrayModeClick
@@ -191,7 +192,8 @@ fun BluetoothScreen(
 
         // Counter Card
         CounterCard(
-            broadcastsSent = keystrokesSent,
+            confirmed = confirmed,
+            skipped = skipped,
             targetsCount = connectedCount
         )
     }
@@ -203,7 +205,7 @@ private fun CrayModeCard(
     secondsRemaining: Int,
     duration: Int,
     targetsCount: Int,
-    broadcastCount: Int,
+    confirmedCount: Int,
     enabled: Boolean,
     onDurationSelected: (Int) -> Unit,
     onCrayClick: () -> Unit
@@ -255,7 +257,7 @@ private fun CrayModeCard(
 
             if (!isCrayActive) {
                 Text(
-                    text = "Auto-scan + attack ALL nearby devices at max speed",
+                    text = "Auto-scan + precision pair ALL nearby devices",
                     style = MaterialTheme.typography.bodySmall,
                     color = textColor,
                     modifier = Modifier.padding(top = 4.dp)
@@ -290,12 +292,12 @@ private fun CrayModeCard(
                     }
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
-                            text = formatCount(broadcastCount),
+                            text = formatCount(confirmedCount),
                             style = MaterialTheme.typography.displaySmall,
                             fontWeight = FontWeight.Bold,
                             color = textColor
                         )
-                        Text("HITS", style = MaterialTheme.typography.labelSmall, color = textColor)
+                        Text("CONFIRMED", style = MaterialTheme.typography.labelSmall, color = textColor)
                     }
                 }
 
@@ -363,7 +365,7 @@ private fun CrayModeCard(
 }
 
 @Composable
-private fun CounterCard(broadcastsSent: Int, targetsCount: Int) {
+private fun CounterCard(confirmed: Int, skipped: Int, targetsCount: Int) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
@@ -376,20 +378,28 @@ private fun CounterCard(broadcastsSent: Int, targetsCount: Int) {
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
-                    text = formatCount(broadcastsSent),
-                    style = MaterialTheme.typography.displaySmall
+                    text = formatCount(confirmed),
+                    style = MaterialTheme.typography.displaySmall,
+                    color = MaterialTheme.colorScheme.primary
                 )
                 Text(
-                    text = stringResource(R.string.keystrokes_sent_label),
+                    text = "Confirmed",
                     style = MaterialTheme.typography.labelMedium,
                     modifier = Modifier.padding(top = 4.dp)
                 )
             }
-            Box(
-                modifier = Modifier
-                    .width(1.dp)
-                    .height(48.dp)
-            )
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = formatCount(skipped),
+                    style = MaterialTheme.typography.displaySmall,
+                    color = MaterialTheme.colorScheme.outline
+                )
+                Text(
+                    text = "Skipped",
+                    style = MaterialTheme.typography.labelMedium,
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+            }
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
                     text = targetsCount.toString(),
@@ -410,7 +420,7 @@ private fun formatStatus(state: HidState): String {
     return when (state) {
         is HidState.Idle -> stringResource(R.string.attack_state_idle)
         is HidState.Scanning -> stringResource(R.string.attack_state_scanning)
-        is HidState.Attacking -> stringResource(R.string.attack_state_attacking, state.connectedCount)
+        is HidState.Attacking -> "Status: Pairing with ${state.connectedCount} target(s)"
         is HidState.CrayMode -> "CRAY MODE: ${state.connectedCount} targets, ${state.secondsRemaining}s left"
         is HidState.Stopping -> stringResource(R.string.attack_state_stopping)
         is HidState.Error -> stringResource(R.string.attack_state_error)

